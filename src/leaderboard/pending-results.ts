@@ -1,7 +1,10 @@
-const prefix = 'orbital-run:local-result:'
-const pending = new Map()
+import type { LocalResult } from '../game/round/model.js'
+import { isRecord, isScore } from '../shared/validation.js'
 
-export function saveLocalResult(result) {
+const prefix = 'orbital-run:local-result:'
+const pending = new Map<string, LocalResult>()
+
+export function saveLocalResult(result: LocalResult) {
   pending.set(result.id, result)
   try {
     localStorage.setItem(prefix + result.id, JSON.stringify(result))
@@ -18,8 +21,10 @@ export function pendingLocalResults() {
       const key = localStorage.key(i)
       if (!key?.startsWith(prefix)) continue
       try {
-        const result = JSON.parse(localStorage.getItem(key))
-        if (result?.id === key.slice(prefix.length)) results.set(result.id, result)
+        const raw = localStorage.getItem(key)
+        if (raw === null) continue
+        const result: unknown = JSON.parse(raw)
+        if (isLocalResult(result) && result.id === key.slice(prefix.length)) results.set(result.id, result)
       } catch {
         // A damaged entry should not prevent other results from syncing.
       }
@@ -30,11 +35,16 @@ export function pendingLocalResults() {
   return results.values()
 }
 
-export function forgetLocalResult(id) {
+export function forgetLocalResult(id: string) {
   pending.delete(id)
   try {
     localStorage.removeItem(prefix + id)
   } catch {
     // If the browser retries a stored result later, the server deduplicates it.
   }
+}
+
+function isLocalResult(value: unknown): value is LocalResult {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string' &&
+    isScore(value.score) && isScore(value.botScore)
 }

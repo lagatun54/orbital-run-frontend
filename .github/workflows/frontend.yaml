@@ -25,15 +25,14 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Build static files
         env:
-          BACKEND_URL: ${{ vars.BACKEND_URL || 'https://orbital-run-api.onrender.com' }}
+          VITE_BACKEND_URL: ${{ vars.BACKEND_URL || 'https://orbital-run-api.onrender.com' }}
         run: |
-          if [[ "$BACKEND_URL" != https://* ]]; then
+          if [[ "$VITE_BACKEND_URL" != https://* ]]; then
             echo "::error::BACKEND_URL for GitHub Pages must use https://"
             exit 1
           fi
           npm run build
           test -s dist/index.html
-          test -s dist/config.js
       - uses: actions/upload-pages-artifact@v4
         if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
         with:
