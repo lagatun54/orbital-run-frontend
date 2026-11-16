@@ -1,0 +1,24 @@
+services:
+  frontend:
+    build: .
+    ports:
+      - "127.0.0.1:5173:5173"
+    env_file:
+      - path: .env.local
+        required: false
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /home/node/app
+          initial_sync: true
+          ignore:
+            - package.json
+            - package-lock.json
+            - Dockerfile
+        - action: rebuild
+          path: package.json
+        - action: rebuild
+          path: package-lock.json
+        - action: rebuild
+          path: Dockerfile
