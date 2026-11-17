@@ -4,16 +4,34 @@ import { createRoundController, type RoundController } from '../game/round/contr
 import { createOnlineMatch } from '../game/round/online-session.js'
 import { startLocalRound } from '../game/round/practice.js'
 import { createInterface } from '../game/ui/interface.js'
+import { createScoresApi } from '../leaderboard/scores-api.js'
 import { createLeaderboard } from '../leaderboard/sync.js'
 import { getBackendOrigin } from './config.js'
-import { appState } from './state.js'
-
-if (import.meta.env.DEV) {
-  Object.defineProperty(window, 'orbitalRunState', { get: appState.get, configurable: true })
-}
 
 const lifetime = new AbortController()
+const { signal } = lifetime
+let startupState: { phase: 'loading' } | { phase: 'error'; error: unknown } = { phase: 'loading' }
 let controller: RoundController | undefined
+let destroyScene: (() => void) | undefined
+
+if (import.meta.env.DEV) {
+  Object.defineProperty(window, 'orbitalRunState', {
+    get: () => controller?.getState() ?? startupState,
+    configurable: true,
+  })
+}
+
+function disposeGame() {
+  controller?.dispose()
+  destroyScene?.()
+  destroyScene = undefined
+}
+
+import.meta.hot?.dispose(() => {
+  lifetime.abort()
+  disposeGame()
+})
+
 const controls = createFlightControls(direction => controller?.setDirection(direction))
 const ui = createInterface({
   start: name => controller?.start(name),
@@ -21,36 +39,34 @@ const ui = createInterface({
     if (controller?.isActive()) controls.pressPointer(pointer, direction)
   },
   release: controls.releasePointer,
-}, lifetime.signal)
+}, signal)
 
 try {
   ui.init()
+  const backendOrigin = getBackendOrigin()
   const renderer = await createScene(ui.arena)
-  renderer.render(standby, true)
-  try {
-    const backendOrigin = getBackendOrigin()
-    const results = createLeaderboard(backendOrigin, ui.records, lifetime.signal)
+  if (signal.aborted) {
+    renderer.destroy()
+  } else {
+    destroyScene = renderer.destroy
+    renderer.render(standby, true)
+    const api = backendOrigin ? createScoresApi(backendOrigin) : null
+    const results = createLeaderboard(api, ui.records, signal)
     controller = createRoundController({
-      state: appState, renderer, view: ui.round, controls, results,
+      renderer, view: ui.round, controls, results,
       startLocal: startLocalRound,
       startOnline: backendOrigin ? createOnlineMatch(backendOrigin) : undefined,
     })
-    controls.bindKeyboard(controller.isActive, lifetime.signal)
-    appState.set({ phase: 'ready', mode: backendOrigin ? 'online' : 'local' })
+    controls.bindKeyboard(controller.isActive, signal)
     ui.round.setStartEnabled(true)
     ui.round.announce(backendOrigin ? 'Арена готова.' : 'Доступна локальная игра с ботом.')
-
-    import.meta.hot?.dispose(() => {
-      lifetime.abort()
-      controller?.dispose()
-      renderer.destroy()
-    })
-  } catch (error) {
-    ui.round.announce('Не удалось настроить игру.')
-    throw error
   }
 } catch (error) {
-  ui.round.announce('Не удалось загрузить игру.')
-  appState.set({ phase: 'error', error })
-  console.error(error)
+  if (!signal.aborted) {
+    disposeGame()
+    controller = undefined
+    startupState = { phase: 'error', error }
+    ui.round.announce('Не удалось загрузить игру.')
+    console.error(error)
+  }
 }

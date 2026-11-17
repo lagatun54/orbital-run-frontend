@@ -1,330 +1,555 @@
 :root {
   color-scheme: light;
-  background: #fbf7eb;
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --gap: 8px;
-  --frame-gap: 16px;
-  --ui-radius: 8px;
-  --ui-edge: 4px;
-  --ui-focus: #2565ad;
-  --ui-muted: oklch(0.46 0.032 230);
-  --ui-bot: oklch(0.48 0.108 33);
-  --ui-line: oklch(0.81 0.025 230);
-  --ui-ink: oklch(0.28 0.034 239);
-  --ui-paper: oklch(0.99 0.015 88);
-  --ui-mint: oklch(0.84 0.077 168);
-  --ui-mint-active: oklch(0.78 0.105 166);
-  --ui-green: oklch(0.48 0.082 169);
-  --ui-gold: oklch(0.89 0.095 80);
-  --leaderboard-bg: oklch(0.30 0.016 226 / 69%);
-  --leaderboard-text: oklch(0.99 0.008 90);
-  --leaderboard-muted: oklch(0.94 0.016 223);
-  --ui-mono: "IBM Plex Mono", monospace;
-  --ui-heading: "Nunito", sans-serif;
+  --paper-field: #fbf7eb;
+  --paper: oklch(0.992 0.005 235);
+  --paper-blue: oklch(0.954 0.026 235);
+  --paper-gold: oklch(0.946 0.062 88);
+  --ink: oklch(0.29 0.047 249);
+  --muted: oklch(0.45 0.041 242);
+  --line: oklch(0.79 0.037 235);
+  --blue: oklch(0.45 0.137 252);
+  --blue-pale: oklch(0.91 0.05 239);
+  --coral: oklch(0.48 0.135 35);
+  --blue-plane: url('./src/game/arena/assets/player-plane-right.webp');
+  --coral-plane: url('./src/game/arena/assets/enemy-plane-left.webp');
+  --star: url('./src/game/arena/assets/paper-star.webp');
+  --flight-sheet: url('./src/game/ui/assets/flight-sheet.webp');
+  --score-strip: url('./src/game/ui/assets/score-strip.webp');
+  --launch-paper: url('./src/game/ui/assets/launch-paper.webp');
+  --heading: "Nunito", sans-serif;
+  --mono: "IBM Plex Mono", monospace;
+  --digits: "Barlow Condensed", var(--heading);
+  --space: 8px;
+  --radius: 4px;
+  background: var(--paper-field);
 }
 
 body { margin: 0; }
 [hidden] { display: none !important; }
 
 .game {
-  --arena-width: max(520px, (100dvh - 155px - var(--safe-top) - var(--safe-bottom)) * 16 / 9);
+  --gutter: clamp(16px, 3vw, 40px);
+  isolation: isolate;
   box-sizing: border-box;
   min-block-size: 100vh;
   min-block-size: 100dvh;
-  padding: calc(var(--frame-gap) + var(--safe-top)) calc(var(--frame-gap) + var(--safe-right))
-    calc(var(--frame-gap) + var(--safe-bottom)) calc(var(--frame-gap) + var(--safe-left));
+  padding: calc(var(--gutter) + env(safe-area-inset-top)) calc(var(--gutter) + env(safe-area-inset-right))
+    calc(var(--gutter) + env(safe-area-inset-bottom)) calc(var(--gutter) + env(safe-area-inset-left));
   display: grid;
   grid-template:
-    "score" auto
-    "arena" auto
-    "footer" auto / minmax(0, var(--arena-width));
-  justify-content: center;
-  align-content: center;
-  justify-items: center;
-  gap: var(--frame-gap);
-  color: var(--ui-ink);
-  font: 400 14px/1.4 var(--ui-mono);
+    ". score records" auto
+    ". menu records" 1fr
+    "tools tools tools" auto
+    "footer footer footer" auto / minmax(0, 1fr) minmax(0, 472px) minmax(0, 1fr);
+  gap: calc(2 * var(--space)) var(--space);
+  color: var(--ink);
+  font: 400 16px/1.45 var(--heading);
 }
 
 .game p { margin: 0; }
 .game button, .game input { font: inherit; color: inherit; }
-.game :focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
-
-.scoreboard, .game-menu {
-  border: 1px solid var(--ui-ink);
-  border-radius: var(--ui-radius);
-  box-shadow: var(--ui-edge) var(--ui-edge) var(--ui-ink);
-  background: var(--ui-paper);
-}
-
-.scoreboard {
-  grid-area: score;
-  box-sizing: border-box;
-  width: min(calc(100% - var(--ui-edge)), 396px);
-  padding: 5px 0 7px;
-  display: grid;
-  grid-template-columns: 1fr 1.35fr 1fr;
-  text-align: center;
-  text-transform: uppercase;
-  font-size: 11px;
-}
-
-.scoreboard b {
-  display: block;
-  font: 700 clamp(24px, 6vw, 33px)/1 "Barlow Condensed", var(--ui-heading);
-  font-variant-numeric: tabular-nums;
-}
-
-.score-you { color: var(--ui-green); }
-.score-bot, .score-clock.is-urgent { color: var(--ui-bot); }
-
-.time-track {
-  position: relative;
-  height: 4px;
-  width: min(76px, 80%);
-  margin: 4px auto 0;
-  overflow: hidden;
-  border-radius: 4px;
-  background: var(--ui-line);
-}
-
-.time-track::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--ui-green);
-  transform: scaleX(var(--time-left, 1));
-  transform-origin: left;
-}
-
-.is-urgent .time-track::before { background: var(--ui-bot); }
-
-.arena-slot {
-  grid-area: arena;
-  width: 100%;
-  min-width: 0;
-}
+.game :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 
 .arena {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  background: var(--ui-paper);
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--paper-field);
 }
 
 .arena canvas { position: absolute; inset: 0; display: block; }
 
-.countdown {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--ui-green);
-  text-shadow: 2px 2px var(--ui-paper), -2px -2px var(--ui-paper);
-  font: 700 clamp(56px, 12vw, 100px)/1 "Barlow Condensed", var(--ui-heading);
-  pointer-events: none;
+.leaderboard {
+  box-sizing: border-box;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper);
+  box-shadow: 3px 3px var(--ink);
 }
 
-.game-sidebar { display: contents; }
+.scoreboard {
+  grid-area: score;
+  justify-self: center;
+  display: grid;
+  grid-template-columns: 1fr 1.1fr 1fr;
+  width: min(100%, 420px);
+  box-sizing: border-box;
+  padding: 12px clamp(14px, 3.5vw, 25px);
+  gap: var(--space);
+  text-align: center;
+  font: 600 12px/1.2 var(--mono);
+}
 
-.flight-deck {
-  grid-area: arena;
-  align-self: center;
-  width: min(calc(100% - var(--ui-edge)), 382px);
-  min-width: 0;
+.scoreboard, .game-menu {
+  position: relative;
+  isolation: isolate;
+}
+
+.scoreboard::before, .game-menu::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--sheet) center / 100% 100% no-repeat;
+  filter: saturate(var(--sheet-saturation, 1)) drop-shadow(1px 3px 1px oklch(0.29 0.047 249 / 24%));
+}
+
+.scoreboard { --sheet: var(--score-strip); }
+.game-menu {
+  --sheet: var(--flight-sheet);
+  --sheet-saturation: 0.65;
+}
+
+.scoreboard b {
+  display: block;
+  font: 700 clamp(26px, 6vw, 36px)/1 var(--digits);
+  font-variant-numeric: tabular-nums;
+}
+
+.score-side {
+  display: grid;
+  grid-template: "plane label" auto "plane score" auto / auto auto;
+  align-content: center;
+  justify-content: center;
+  align-items: center;
+  column-gap: 5px;
+  text-align: left;
+  border-radius: var(--radius);
+}
+
+.score-side span { grid-area: label; }
+.score-side b { grid-area: score; }
+.score-side::before {
+  content: "";
+  grid-area: plane;
+  width: clamp(22px, 6vw, 36px);
+  aspect-ratio: 1;
+  background: var(--plane) center / contain no-repeat;
+}
+
+.score-you { --plane: var(--blue-plane); color: var(--blue); }
+.score-bot { --plane: var(--coral-plane); color: var(--coral); }
+
+.score-clock {
+  padding-block: 2px;
+  border-inline: 1px dashed var(--line);
+}
+.score-clock.is-urgent { color: var(--coral); }
+
+.time-track {
+  height: 4px;
+  width: min(80px, 90%);
+  margin: 5px auto 0;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--line);
+}
+
+.time-track::before {
+  content: "";
+  display: block;
+  height: 100%;
+  background: var(--blue);
+  transform: scaleX(var(--time-left, 1));
+  transform-origin: left;
+}
+
+.is-urgent .time-track::before { background: var(--coral); }
+
+.countdown {
+  position: fixed;
   z-index: 1;
+  top: 50%;
+  left: 50%;
+  pointer-events: none;
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  width: clamp(88px, 18vmin, 144px);
+  aspect-ratio: 1;
+  border: 2px dashed var(--blue);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--blue);
+  font: 700 clamp(52px, 11vmin, 88px)/1 var(--digits);
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 280ms ease-out, visibility 280ms;
+}
+
+.countdown.is-visible {
+  opacity: 1;
+  visibility: visible;
 }
 
 .game-menu {
+  grid-area: menu;
+  align-self: center;
+  justify-self: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   display: grid;
-  gap: var(--gap);
-  padding: 16px;
+  padding-block-start: var(--space);
+}
+
+.game-menu.is-leaving {
+  animation: flight-card-exit 320ms cubic-bezier(0.4, 0, 0.35, 1) both;
+}
+
+@keyframes flight-card-exit { to { opacity: 0; } }
+
+.flight-illustration {
+  position: relative;
+  height: clamp(108px, 20dvh, 164px);
+  margin-inline: clamp(14px, 4vw, 22px);
+  overflow: hidden;
+}
+
+.flight-plane, .flight-star, .flight-route { position: absolute; }
+.flight-plane, .flight-star {
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: var(--graphic) center / contain no-repeat;
+}
+
+.flight-plane-you {
+  --graphic: var(--blue-plane);
+  width: 34%;
+  left: 26%;
+  top: 47%;
+  rotate: -19deg;
+}
+.flight-plane-bot {
+  --graphic: var(--coral-plane);
+  width: 29%;
+  left: 76%;
+  top: 55%;
+  rotate: -16deg;
+}
+.flight-star {
+  --graphic: var(--star);
+  width: clamp(40px, 12%, 60px);
+  left: 53%;
+  top: 43%;
+  rotate: 12deg;
+}
+
+.flight-route {
+  width: 48%;
+  height: 64%;
+  border: 2px dashed;
+  border-radius: 50%;
+  opacity: 0.48;
+}
+.flight-route-you {
+  left: -16%;
+  bottom: -8%;
+  border-color: var(--blue) transparent transparent;
+  rotate: -21deg;
+}
+.flight-route-bot {
+  right: -18%;
+  top: -4%;
+  border-color: transparent transparent var(--coral);
+  rotate: -16deg;
+}
+
+.flight-brief {
+  display: grid;
+  gap: calc(3 * var(--space));
+  padding: 0 clamp(22px, 7vw, 36px) clamp(22px, 7vw, 36px);
 }
 
 .game-menu h1 {
-  display: flex;
-  align-items: center;
-  gap: var(--gap);
-  margin: 0;
-  font: 900 clamp(21px, 5vw, 30px)/1.1 var(--ui-heading);
+  margin: 0 0 var(--space);
+  color: var(--ink);
+  font: 400 clamp(25px, 7vw, 36px)/1.1 Georgia, "Noto Serif", serif;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
-.game-menu h1::before {
-  content: "";
-  flex: 0 0 18px;
-  height: 24px;
-  background: conic-gradient(from 90deg, #b96f3b 0 25%, #f3ba68 0 50%, #ffe9ad 0 75%, #f3ba68 0);
-  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+.mission {
+  max-inline-size: 36ch;
+  color: var(--muted);
+  text-wrap: pretty;
 }
 
-.mission, .pilot-field, .game-footer, .flight-controls p { color: var(--ui-muted); }
-.pilot-field { font-size: 12px; }
-.pilot-field small { font-size: inherit; }
+.flight-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) fit-content(56%);
+  align-items: end;
+  gap: clamp(12px, 4vw, 24px);
+}
 
-.game-menu input, .game-menu button {
-  box-sizing: border-box;
-  width: 100%;
+.has-result .flight-actions {
+  grid-template-columns: auto;
+  justify-content: end;
+}
+
+.pilot-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  color: var(--muted);
+  font: 500 12px/1.3 var(--mono);
+}
+
+.game-menu input {
   min-height: 44px;
-  padding: 6px 10px;
-  border: 1px solid var(--ui-ink);
-  border-radius: var(--ui-radius);
-  background: var(--ui-paper);
-  color: var(--ui-ink);
-  font-size: 16px;
+  padding: 0 4px;
+  border: 0;
+  border-block-end: 1px solid var(--muted);
+  border-radius: 0;
+  background: transparent;
+  font: 400 16px/1.3 var(--heading);
+}
+.game-menu input::placeholder { color: var(--muted); opacity: 1; }
+.game-menu input:hover, .game-menu input:focus { border-color: var(--blue); }
+
+.game-menu .launch-button {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, auto) 26px;
+  place-content: center;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: var(--space) clamp(9px, 2.75vw, 16px);
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: 600 14px/1.2 var(--mono);
+  cursor: pointer;
 }
 
-.game-menu input { display: block; margin-top: 4px; }
-.game-menu button { background: var(--ui-mint); cursor: pointer; font-weight: 600; }
-.game-menu button:hover:not(:disabled) { background: var(--ui-mint-active); }
-.game-menu button:active:not(:disabled) { transform: translateY(1px); }
-.game-menu button:disabled { opacity: 0.65; cursor: default; }
-.game-menu button span { font-size: 0.8em; }
+.launch-button::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -1px -3px;
+  background: var(--launch-paper) center / 100% 100% no-repeat;
+  filter: brightness(var(--launch-brightness, 1)) drop-shadow(0 1px 0 oklch(0.45 0.137 252 / 35%));
+  rotate: -1.5deg;
+}
+
+.launch-mark {
+  position: relative;
+  aspect-ratio: 1;
+  pointer-events: none;
+}
+
+.launch-plane {
+  position: absolute;
+  inset: 0;
+  background: var(--blue-plane) center / contain no-repeat;
+  transform: rotate(-17deg);
+}
+
+.launch-button:hover:not(:disabled) { --launch-brightness: 0.97; }
+.launch-button:active:not(:disabled) { --launch-brightness: 0.93; }
+.game-menu .launch-button:disabled { opacity: 0.65; cursor: default; }
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes flight-card-exit {
+    to { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  }
+
+  .launch-button:active:not(:disabled):not(.is-launching) { transform: translateY(1px) scale(0.97); }
+
+  .launch-button.is-launching {
+    --launch-duration: 560ms;
+    animation: paper-press var(--launch-duration) cubic-bezier(0.22, 0.72, 0.32, 1) both;
+  }
+
+  .is-launching .launch-plane {
+    animation: paper-takeoff var(--launch-duration) cubic-bezier(0.42, 0, 0.48, 1) both;
+  }
+
+  .is-launching .launch-mark::before,
+  .is-launching .launch-mark::after {
+    content: "";
+    position: absolute;
+    opacity: 0;
+  }
+
+  .is-launching .launch-mark::before {
+    bottom: 56%;
+    left: 45%;
+    width: 24px;
+    height: 63px;
+    border-left: 2px solid var(--blue);
+    border-radius: 65% 0 0 35%;
+    box-shadow: -4px 2px 0 -2px oklch(0.45 0.137 252 / 35%);
+    transform-origin: bottom left;
+    animation: launch-ink var(--launch-duration) ease-out both;
+  }
+
+  .is-launching .launch-mark::after {
+    bottom: 150%;
+    left: 90%;
+    width: 17px;
+    aspect-ratio: 1;
+    background: var(--star) center / contain no-repeat;
+    animation: launch-glint var(--launch-duration) ease-out both;
+  }
+
+  @keyframes paper-press {
+    0%, 100% { transform: translateY(0) scale(1); }
+    18% { transform: translateY(2px) scale(0.955, 0.92); }
+    38% { transform: translateY(0) scale(1); }
+  }
+
+  @keyframes paper-takeoff {
+    0% { transform: rotate(-17deg); }
+    19% { transform: translate(-6px, 3px) rotate(-31deg) scale(0.92); }
+    48% { transform: translate(4px, -23px) rotate(-62deg) scale(1.15); }
+    76% { transform: translate(18px, -55px) rotate(-60deg) scale(1.03); opacity: 1; }
+    100% { transform: translate(31px, -78px) rotate(-54deg) scale(0.72); opacity: 0; }
+  }
+
+  @keyframes launch-ink {
+    0%, 25% { transform: rotate(27deg) scaleY(0.14); opacity: 0; }
+    53% { opacity: 0.72; }
+    78% { transform: rotate(27deg) scaleY(1); opacity: 0.56; }
+    100% { transform: rotate(27deg) scaleY(1); opacity: 0; }
+  }
+
+  @keyframes launch-glint {
+    0%, 46% { transform: translate(-2px, 7px) rotate(-30deg) scale(0.55); opacity: 0; }
+    62% { opacity: 0.95; }
+    78% { transform: translate(5px, -6px) rotate(15deg) scale(1.05); opacity: 0.8; }
+    100% { transform: translate(9px, -11px) rotate(27deg) scale(0.82); opacity: 0; }
+  }
+}
+
+.flight-result {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(2 * var(--space));
+  font: 600 13px/1.25 var(--mono);
+}
+
+.flight-result span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space);
+  padding-block-end: 4px;
+  border-block-end: 1px solid var(--line);
+}
+
+.flight-result b { font: 700 30px/1 var(--digits); font-variant-numeric: tabular-nums; }
+.result-you { color: var(--blue); }
+.result-bot { color: var(--coral); }
 
 .flight-controls {
-  display: flex;
-  gap: var(--frame-gap);
-  align-items: center;
+  grid-area: tools;
+  align-self: end;
+  justify-self: start;
+  display: grid;
+  justify-items: center;
+  row-gap: 4px;
 }
 
-.flight-controls strong { display: block; color: var(--ui-ink); }
-.flight-controls p { font-size: 12px; }
+.flight-controls p, .game-footer p {
+  color: var(--muted);
+  background: var(--paper);
+  border-radius: var(--radius);
+  padding: 4px var(--space);
+  font: 600 12px/1.35 var(--heading);
+}
+
+.flight-controls p { text-align: center; }
 
 .game-footer {
   grid-area: footer;
   display: flex;
+  align-items: end;
   justify-content: space-between;
-  gap: var(--gap);
-  width: 100%;
-  font-size: 12px;
-  overflow-wrap: anywhere;
+  gap: var(--space);
+  min-width: 0;
 }
 
-.game.is-compact {
-  grid-template:
-    "score" auto
-    "arena" auto
-    "deck" auto
-    "records" auto
-    "footer" auto / minmax(0, 600px);
-  --frame-gap: 12px;
+.game-status { overflow-wrap: anywhere; }
+
+.game-footer .game-shortcuts {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-.is-compact .flight-deck {
-  grid-area: deck;
-  width: 100%;
-  box-sizing: border-box;
-  padding-inline-end: var(--ui-edge);
-}
-.flight-deck:has(> [hidden] + [hidden]) { display: none; }
-@media (orientation: portrait) and (max-height: 630px) {
-  .game.is-compact { --frame-gap: 8px; }
-  .leaderboard.is-compact { padding-block: 0; }
-  .is-compact .game-menu { padding: 12px; }
-}
-
-@media (orientation: landscape) and (max-height: 520px) {
-  .game.is-compact {
-    grid-template:
-      "score sidebar" auto
-      "arena sidebar" auto
-      "footer footer" auto / minmax(0, 1fr) minmax(216px, 30%);
-    padding-block: calc(var(--gap) + var(--safe-top)) calc(var(--gap) + var(--safe-bottom));
-    gap: var(--gap) var(--frame-gap);
-  }
-
-  .game-sidebar {
-    grid-area: sidebar;
-    display: grid;
-    gap: var(--gap);
-    align-self: center;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .game-sidebar > .flight-deck, .game-sidebar > .leaderboard.is-compact { grid-area: auto; }
-  .is-compact .arena-slot {
-    align-self: center;
-    width: min(100%, max(210px, (100dvh - 122px - var(--safe-top) - var(--safe-bottom)) * 16 / 9));
-  }
-
-  .is-compact .game-menu { padding: 10px; }
-  .is-compact .mission { font-size: 13px; }
-  .is-compact .game-menu h1 { font-size: 21px; }
-  .is-compact .flight-controls { flex-wrap: wrap; justify-content: center; text-align: center; gap: 4px; }
+.game-shortcuts kbd {
+  border: 1px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  padding: 2px 5px;
+  border-radius: var(--radius);
+  color: var(--ink);
+  font: 500 11px/1.2 var(--mono);
 }
 
 .leaderboard {
-  grid-area: arena;
+  grid-area: records;
   align-self: start;
   justify-self: end;
-  z-index: 2;
-  width: 164px;
-  max-height: min(196px, 39dvh);
-  margin: 8px;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  width: min(100%, 216px);
+  max-height: min(330px, 42dvh);
   overflow: hidden;
-  padding: 3px 8px 6px;
-  border-radius: 3px;
-  background: var(--leaderboard-bg);
-  color: var(--leaderboard-text);
-  font: 600 11px/1.28 var(--ui-mono);
+  font: 500 12px/1.4 var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
-.leaderboard.is-compact {
-  grid-area: records;
-  justify-self: center;
-  width: min(100%, 600px);
-  max-height: min(220px, 32dvh);
+.leaderboard h2 {
   margin: 0;
+  background: var(--paper-blue);
+  color: var(--ink);
+  font: 900 16px/1.2 var(--heading);
 }
+
+.leaderboard-title {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.leaderboard button.leaderboard-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space);
+  min-height: 44px;
+  cursor: pointer;
+}
+button.leaderboard-title:hover { background: var(--blue-pale); }
+button.leaderboard-title:active { background: var(--line); }
+.leaderboard :focus-visible { outline-offset: -3px; }
+
+.leaderboard-title span {
+  flex: 0 0 6px;
+  height: 6px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  rotate: 45deg;
+}
+.leaderboard-title[aria-expanded="true"] span { rotate: 225deg; }
+
 .leaderboard-content {
   display: flex;
   min-height: 0;
   flex-direction: column;
+  padding: 6px var(--space);
+  border-top: 1px dashed var(--line);
 }
-.game .leaderboard.is-compact button { min-height: 44px; }
-
-.leaderboard h2 {
-  margin: 0;
-  text-align: center;
-  font: 900 15px/1.3 var(--ui-heading);
-}
-
-.leaderboard .leaderboard-title {
-  position: relative;
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 4px 0 5px;
-  border: 0;
-  border-radius: 2px;
-  background: none;
-  color: inherit;
-  font: inherit;
-}
-
-.leaderboard button.leaderboard-title { min-height: 28px; cursor: pointer; }
-button.leaderboard-title:hover { background: oklch(1 0 0 / 12%); }
-button.leaderboard-title:active { background: oklch(1 0 0 / 21%); }
-.game .leaderboard :focus-visible { outline: 2px solid var(--ui-gold); outline-offset: -2px; }
-
-.leaderboard-title span {
-  position: absolute;
-  top: 50%;
-  right: 3px;
-  width: 5px;
-  height: 5px;
-  border: solid currentColor;
-  border-width: 0 1px 1px 0;
-  transform: translateY(-65%) rotate(45deg);
-}
-
-.leaderboard-title[aria-expanded="true"] span { transform: translateY(-20%) rotate(225deg); }
 
 .leaderboard ol {
   overflow: auto;
@@ -334,53 +559,47 @@ button.leaderboard-title:active { background: oklch(1 0 0 / 21%); }
   padding: 0;
   list-style: none;
   scrollbar-width: thin;
-  scrollbar-color: var(--leaderboard-muted) transparent;
+  scrollbar-color: var(--line) transparent;
 }
 
 .leaderboard li {
   display: grid;
   grid-template-columns: 3ch minmax(0, 1fr) minmax(2ch, auto);
-  column-gap: 3px;
+  column-gap: 4px;
+  padding: 4px;
 }
-
-.leaderboard-place { color: var(--leaderboard-muted); }
+.leaderboard li + li { border-top: 1px dashed var(--line); }
+.leaderboard-place { color: var(--muted); }
 .leaderboard-name, .leaderboard-score { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.leaderboard-score { max-width: 6ch; text-align: right; }
-.leaderboard .is-player, .is-player .leaderboard-place { color: var(--ui-gold); }
+.leaderboard-score { max-width: 8ch; text-align: right; }
+.leaderboard .is-player { background: var(--paper-gold); font-weight: 600; }
 
-.game .leaderboard p { margin: 0; color: var(--leaderboard-muted); overflow-wrap: anywhere; }
+.game .leaderboard p { padding: 2px 4px; color: var(--muted); overflow-wrap: anywhere; }
 .game .leaderboard .leaderboard-rank {
   margin-top: 4px;
-  padding-top: 3px;
-  border-top: 1px solid oklch(1 0 0 / 25%);
-  color: var(--ui-gold);
+  padding: 4px;
+  background: var(--paper-gold);
+  color: var(--ink);
 }
 
 .joystick {
   position: relative;
-  flex: 0 0 auto;
-  width: clamp(104px, 32vw, 128px);
+  width: clamp(104px, 30vw, 132px);
   aspect-ratio: 1;
   touch-action: none;
   user-select: none;
-  -webkit-user-select: none;
   -webkit-touch-callout: none;
   cursor: grab;
 }
-
-@media (orientation: landscape) and (max-height: 520px) {
-  .joystick { width: clamp(88px, 28dvh, 112px); }
-}
-
 .joystick.is-held { cursor: grabbing; }
 
 .joystick-dial, .joystick-knob { position: absolute; pointer-events: none; }
 .joystick-dial { inset: 0; width: 100%; height: 100%; }
-.joystick-paper { fill: var(--ui-paper); stroke: var(--ui-ink); stroke-width: 1.5; }
-.joystick-track { fill: none; stroke: var(--ui-green); stroke-width: 1; stroke-dasharray: 2 4; opacity: 0.6; }
+.joystick-paper { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; }
+.joystick-track { fill: none; stroke: var(--blue); stroke-width: 1; stroke-dasharray: 2 4; opacity: 0.6; }
 .joystick-ticks, .joystick-marks {
   fill: none;
-  stroke: var(--ui-green);
+  stroke: var(--blue);
   stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -395,16 +614,76 @@ button.leaderboard-title:active { background: oklch(1 0 0 / 21%); }
   aspect-ratio: 1;
   box-sizing: border-box;
   place-items: center;
-  border: 1.5px solid var(--ui-ink);
+  border: 1.5px solid var(--ink);
   border-radius: 50%;
-  background: var(--ui-mint);
-  box-shadow: 0 3px var(--ui-ink);
+  background: var(--blue-pale);
+  box-shadow: 0 3px var(--ink);
   transform: translate(calc(-50% + var(--stick-x, 0px)), calc(-50% + var(--stick-y, 0px)));
 }
 
-.joystick-knob svg { width: 40%; fill: var(--ui-green); }
-.joystick.is-held .joystick-knob { background: var(--ui-mint-active); box-shadow: 0 1px var(--ui-ink); }
+.joystick-knob::before {
+  content: "";
+  width: 46%;
+  aspect-ratio: 1;
+  background: var(--star) center / contain no-repeat;
+}
+.joystick.is-held .joystick-knob { background: var(--line); box-shadow: 0 1px var(--ink); }
 
 @media (prefers-reduced-motion: no-preference) {
   .joystick:not(.is-held) .joystick-knob { transition: transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+}
+
+.game.is-compact {
+  --gutter: 12px;
+  grid-template:
+    "score score" auto
+    "menu menu" 1fr
+    "tools records" auto
+    "footer footer" auto / minmax(0, 1fr) minmax(0, 1.12fr);
+  gap: calc(1.5 * var(--space));
+}
+
+.is-compact .game-menu { max-width: 472px; }
+.is-compact .leaderboard { align-self: end; max-height: min(235px, 28dvh); }
+.is-compact .leaderboard-title { font-size: 14px; }
+
+@media (orientation: portrait) and (max-height: 680px) {
+  .flight-illustration { height: 78px; }
+  .flight-brief { gap: calc(2 * var(--space)); }
+  .mission { font-size: 14px; }
+  .game.is-compact { row-gap: var(--space); }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .game.is-compact {
+    --gutter: 8px;
+    grid-template:
+      "score score" auto
+      "menu records" 1fr
+      "tools records" auto
+      "footer footer" auto / minmax(0, 1fr) minmax(150px, 24%);
+    gap: 6px calc(1.5 * var(--space));
+  }
+
+  .scoreboard { padding-block: 10px; }
+  .scoreboard b { font-size: 30px; }
+  .is-compact .game-menu {
+    max-width: 550px;
+    grid-template-columns: minmax(0, 28%) minmax(0, 1fr);
+    grid-template-rows: minmax(0, auto);
+    padding: var(--space);
+  }
+  .flight-illustration { height: auto; margin-inline: 4px 0; }
+  .flight-plane-you { top: 32%; left: 50%; width: 76%; }
+  .flight-plane-bot { top: 72%; left: 60%; width: 75%; }
+  .flight-star { width: 30%; left: 44%; top: 52%; }
+  .flight-brief {
+    gap: var(--space);
+    padding: var(--space) clamp(20px, 4vw, 28px) var(--space) calc(1.5 * var(--space));
+  }
+  .game-menu h1 { font-size: clamp(22px, 4vw, 32px); }
+  .mission { font-size: 14px; }
+  .joystick { width: clamp(88px, 28dvh, 112px); }
+  .flight-controls { grid-auto-flow: column; align-items: end; gap: var(--space); }
+  .is-compact .leaderboard { max-height: 42dvh; }
 }

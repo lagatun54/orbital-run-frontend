@@ -1,3 +1,5 @@
+import { Direction } from '../direction.js'
+
 interface JoystickActions {
   press(pointer: number, direction: number): void
   release(pointer: number): void
@@ -18,9 +20,7 @@ export function createJoystick(actions: JoystickActions, signal: AbortSignal) {
       <path class="joystick-ticks" d="M32 32l4 4m48 48 4 4m0-56-4 4M36 84l-4 4" />
       <path class="joystick-marks" d="m56 16 4-4 4 4m40 40 4 4-4 4M56 104l4 4 4-4M16 56l-4 4 4 4" />
     </svg>
-    <div class="joystick-knob" aria-hidden="true">
-      <svg viewBox="0 0 20 20"><path d="m10 3 5 7-5 7-5-7Z" /></svg>
-    </div>`
+    <div class="joystick-knob" aria-hidden="true"></div>`
   const knob = root.querySelector<HTMLElement>('.joystick-knob')!
   let available = false
   let enabled = false
@@ -37,8 +37,8 @@ export function createJoystick(actions: JoystickActions, signal: AbortSignal) {
     knob.style.setProperty('--stick-y', `${y * travel}px`)
     let direction = 0
     if (distance >= radius * 0.16) {
-      if (Math.abs(x) > Math.abs(y) * diagonalThreshold) direction |= x < 0 ? 4 : 8
-      if (Math.abs(y) > Math.abs(x) * diagonalThreshold) direction |= y < 0 ? 1 : 2
+      if (Math.abs(x) > Math.abs(y) * diagonalThreshold) direction |= x < 0 ? Direction.Left : Direction.Right
+      if (Math.abs(y) > Math.abs(x) * diagonalThreshold) direction |= y < 0 ? Direction.Up : Direction.Down
     }
     actions.press(event.pointerId, direction)
   }

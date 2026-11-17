@@ -1,9 +1,13 @@
+import { Direction } from '../direction.js'
+
 import {
   ARENA_WIDTH as WIDTH, ARENA_HEIGHT as HEIGHT, CRYSTAL_COUNT, type Point,
 } from '../arena/model.js'
 import { ROUND_DURATION_MS, type MatchFrame, type PilotState, type StartRound } from './model.js'
 
-const COUNTDOWN_MS = 2_000
+const COUNTDOWN_MS = 3_000
+const PLAYER_SPEED = 240
+const BOT_SPEED = 130
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
 
 type MutablePilot = { -readonly [Key in keyof PilotState]: PilotState[Key] }
@@ -32,18 +36,19 @@ export function createLocalMatch(started: number): (now: number, direction: numb
   }
 
   return (now, direction) => {
-    if (now < begins) return snapshot('countdown', begins - now)
+    if (now < begins) return snapshot('countdown', begins - Math.max(now, started))
 
     const step = Math.min(now, ends)
     const elapsed = Math.min(Math.max(0, step - previous) / 1000, 0.1)
     previous = step
-    move(player, Number(Boolean(direction & 8)) - Number(Boolean(direction & 4)),
-      Number(Boolean(direction & 2)) - Number(Boolean(direction & 1)), 265 * elapsed)
+    const horizontal = Number(Boolean(direction & Direction.Right)) - Number(Boolean(direction & Direction.Left))
+    const vertical = Number(Boolean(direction & Direction.Down)) - Number(Boolean(direction & Direction.Up))
+    move(player, horizontal, vertical, PLAYER_SPEED * elapsed)
     const target = crystals.reduce((nearest, point) => distance(bot, point) < distance(bot, nearest) ? point : nearest)
     const dx = target.x - bot.x
     const dy = target.y - bot.y
     const length = Math.hypot(dx, dy)
-    if (length > 0) move(bot, dx / length, dy / length, 143 * elapsed)
+    if (length > 0) move(bot, dx / length, dy / length, BOT_SPEED * elapsed)
 
     for (const [i, crystal] of crystals.entries()) {
       const playerDistance = distance(player, crystal)

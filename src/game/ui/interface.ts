@@ -1,5 +1,5 @@
 import type { RoundView } from '../round/controller.js'
-import { ROUND_DURATION_MS, type MatchFrame } from '../round/model.js'
+import { createRoundHud } from './round-hud.js'
 import { createJoystick } from './joystick.js'
 import { createRecords } from './records.js'
 
@@ -9,40 +9,47 @@ interface Actions {
   release(pointer: number): void
 }
 
-const briefing = 'Соберите больше кристаллов, чем бот, за 30 секунд.'
+const briefing = 'За 30 секунд соберите больше звёздочек, чем бот.'
 
 export function createInterface(actions: Actions, signal: AbortSignal) {
   const root = document.createElement('main')
   root.className = 'game'
   root.innerHTML = `
-    <div class="scoreboard" role="group" aria-label="Табло">
-      <div class="score-you">Вы <b data-player>00</b></div>
-      <div class="score-clock">Время <b data-clock>00:30</b><div class="time-track" aria-hidden="true"></div></div>
-      <div class="score-bot">Бот <b data-bot>00</b></div>
-    </div>
-    <div class="arena-slot">
-      <div class="arena" role="img" aria-label="Арена с ракетами и кристаллами">
-        <div class="countdown" hidden aria-hidden="true"></div>
+    <div class="arena" role="img" aria-label="Арена с двумя бумажными самолётиками и звёздочками"></div>
+    <form class="game-menu">
+      <div class="flight-illustration" aria-hidden="true">
+        <span class="flight-route flight-route-you"></span>
+        <span class="flight-route flight-route-bot"></span>
+        <span class="flight-plane flight-plane-you"></span>
+        <span class="flight-plane flight-plane-bot"></span>
+        <span class="flight-star"></span>
       </div>
-    </div>
-    <div class="game-sidebar">
-      <div class="flight-deck">
-        <form class="game-menu">
+      <div class="flight-brief">
+        <div>
           <h1>Орбитальный сбор</h1>
           <p class="mission">${briefing}</p>
-          <label class="pilot-field">Имя пилота <small>· по желанию</small>
-            <input type="text" placeholder="Пилот" autocomplete="nickname" maxlength="40">
+        </div>
+        <div class="flight-result" hidden>
+          <span class="result-you">Вы <b data-result-player></b></span>
+          <span class="result-bot">Бот <b data-result-bot></b></span>
+        </div>
+        <div class="flight-actions">
+          <label class="pilot-field">Имя пилота
+            <input type="text" placeholder="По желанию" autocomplete="nickname" maxlength="40">
           </label>
-          <button type="submit" disabled>Играть <span aria-hidden="true">▶</span></button>
-        </form>
-        <div class="flight-controls" hidden>
-          <p><strong>Управление</strong>Нажмите или потяните в сторону полёта.</p>
+          <button class="launch-button" type="submit" disabled>
+            <span class="launch-label">Взлететь</span>
+            <span class="launch-mark" aria-hidden="true"><span class="launch-plane"></span></span>
+          </button>
         </div>
       </div>
+    </form>
+    <div class="flight-controls" hidden>
+      <p>Коснитесь или потяните<br>в сторону полёта</p>
     </div>
     <footer class="game-footer">
       <p class="game-status" role="status">Загружаем арену…</p>
-      <p class="game-shortcuts" hidden>WASD / ↑ ↓ ← →</p>
+      <p class="game-shortcuts" hidden><kbd>WASD</kbd> <span>или</span> <kbd>↑ ↓ ← →</kbd></p>
     </footer>`
 
   const get = <T extends HTMLElement = HTMLElement>(selector: string) => root.querySelector<T>(selector)!
@@ -50,84 +57,95 @@ export function createInterface(actions: Actions, signal: AbortSignal) {
   const menu = get<HTMLFormElement>('.game-menu')
   const title = get('h1')
   const mission = get('.mission')
+  const resultSheet = get('.flight-result')
+  const resultPlayer = get('[data-result-player]')
+  const resultBot = get('[data-result-bot]')
   const nameField = get('.pilot-field')
   const pilot = get<HTMLInputElement>('input')
   const play = get<HTMLButtonElement>('button[type="submit"]')
-  const countdown = get('.countdown')
+  const launchLabel = get('.launch-label')
+  const launchPlane = get('.launch-plane')
   const flightControls = get('.flight-controls')
   const shortcuts = get('.game-shortcuts')
   const status = get('.game-status')
-  const clock = get('[data-clock]')
-  const timer = get('.score-clock')
-  const player = get('[data-player]')
-  const bot = get('[data-bot]')
-
   const joystick = createJoystick(actions, signal)
   const records = createRecords(announce, signal)
-  const compact = matchMedia('(max-width: 760px), (max-height: 520px), (any-pointer: coarse)')
+  const compact = matchMedia('(max-width: 980px), (max-height: 520px), (any-pointer: coarse)')
   const touchInput = matchMedia('(max-width: 640px), (any-pointer: coarse)')
+  const hud = createRoundHud()
+  root.prepend(hud.scoreboard)
+  menu.after(hud.countdown)
   flightControls.prepend(joystick.root)
-  get('.game-sidebar').append(records.root)
+  root.append(records.root)
 
   function announce(message: string) {
     status.textContent = message
   }
 
-  function setAction(action: string) {
-    const arrow = document.createElement('span')
-    arrow.textContent = ' ▶'
-    arrow.setAttribute('aria-hidden', 'true')
-    play.replaceChildren(action, arrow)
+  async function start() {
+    if (play.disabled || menu.hidden || play.classList.contains('is-launching')) return
+    const name = Array.from(pilot.value.trim()).slice(0, 20).join('')
+    play.classList.add('is-launching')
+    play.setAttribute('aria-disabled', 'true')
+    const flight = launchPlane.getAnimations()[0]
+    if (flight) await flight.finished.catch(() => {})
+    play.removeAttribute('aria-disabled')
+    if (!signal.aborted) actions.start(name)
   }
 
-  function start() {
-    if (play.disabled || menu.hidden) return
-    actions.start(Array.from(pilot.value.trim()).slice(0, 20).join(''))
+  async function leaveMenu() {
+    menu.inert = true
+    pilot.blur()
+    menu.classList.add('is-leaving')
+    const fade = menu.getAnimations()[0]
+    if (fade) await fade.finished.catch(() => {})
+    if (!menu.inert) return
+    menu.hidden = true
+    menu.classList.remove('is-leaving')
+    play.classList.remove('is-launching')
   }
 
   function updateLayout() {
     root.classList.toggle('is-compact', compact.matches)
     records.setCompact(compact.matches)
     joystick.setAvailable(touchInput.matches)
-    flightControls.hidden = !menu.hidden || !touchInput.matches
+    flightControls.hidden = !(menu.hidden || menu.inert) || !touchInput.matches
     shortcuts.hidden = touchInput.matches
   }
 
-  function showScore(frame: MatchFrame) {
-    const ms = frame.phase === 'countdown' ? ROUND_DURATION_MS : frame.remainingMs
-    timer.classList.toggle('is-urgent', ms > 0 && ms <= 5000)
-    timer.style.setProperty('--time-left', String(Math.min(1, Math.max(0, ms / ROUND_DURATION_MS))))
-    clock.textContent = '00:' + String(Math.ceil(ms / 1000)).padStart(2, '0')
-    player.textContent = String(frame.player.score).padStart(2, '0')
-    bot.textContent = String(frame.bot.score).padStart(2, '0')
-  }
-
   const round: RoundView = {
-    announce, showScore,
+    announce, showScore: hud.showScore,
     setStartEnabled(value) { play.disabled = !value },
-    showConnecting() { play.textContent = 'Подключение…' },
+    showConnecting() { launchLabel.textContent = 'Подключение…' },
     showStart(heading, action, canPlay, result) {
       menu.hidden = false
-      countdown.hidden = true
+      menu.inert = false
+      menu.classList.remove('is-leaving')
+      play.classList.remove('is-launching')
+      hud.hideCountdown()
       joystick.setEnabled(false)
       flightControls.hidden = true
       title.textContent = heading
-      mission.textContent = result ? `Итоговый счёт · ${result.score} : ${result.botScore}` : briefing
+      mission.textContent = result ? 'Итоговый счёт' : briefing
+      menu.classList.toggle('has-result', !!result)
+      resultSheet.hidden = !result
+      if (result) {
+        resultPlayer.textContent = String(result.score)
+        resultBot.textContent = String(result.botScore)
+      }
       nameField.hidden = !!result
-      setAction(action)
+      launchLabel.textContent = action
       play.disabled = !canPlay
     },
     showRound(frame) {
-      showScore(frame)
-      if (!menu.hidden) {
-        pilot.blur()
-        menu.hidden = true
+      hud.showScore(frame)
+      if (!menu.hidden && !menu.inert) {
+        void leaveMenu()
         records.setExpanded(false)
         joystick.setEnabled(true)
         flightControls.hidden = !touchInput.matches
       }
-      countdown.hidden = frame.phase !== 'countdown'
-      if (!countdown.hidden) countdown.textContent = String(Math.max(1, Math.ceil(frame.remainingMs / 1000)))
+      hud.showCountdown(frame)
     },
   }
 

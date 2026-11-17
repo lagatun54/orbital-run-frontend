@@ -1,6 +1,10 @@
+import { Direction } from './direction.js'
+
 const keys = new Map([
-  ['KeyW', 1], ['ArrowUp', 1], ['KeyS', 2], ['ArrowDown', 2],
-  ['KeyA', 4], ['ArrowLeft', 4], ['KeyD', 8], ['ArrowRight', 8],
+  ['KeyW', Direction.Up], ['ArrowUp', Direction.Up],
+  ['KeyS', Direction.Down], ['ArrowDown', Direction.Down],
+  ['KeyA', Direction.Left], ['ArrowLeft', Direction.Left],
+  ['KeyD', Direction.Right], ['ArrowRight', Direction.Right],
 ])
 
 export function createFlightControls(onChange: (direction: number) => void) {

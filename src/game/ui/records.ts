@@ -47,8 +47,7 @@ export function createRecords(announce: LeaderboardView['announce'], signal: Abo
     toggle.setAttribute('aria-expanded', String(expanded))
     content.hidden = compact && !expanded
     rows.hidden = entries.length === 0
-    if (expanded) rows.tabIndex = 0
-    else rows.removeAttribute('tabindex')
+    rows.tabIndex = 0
     rows.replaceChildren(...(expanded ? entries : entries.slice(0, previewSize)).map((entry, i) => {
       const row = document.createElement('li')
       const position = document.createElement('span')
