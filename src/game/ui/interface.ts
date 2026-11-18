@@ -10,6 +10,7 @@ const briefing = 'За 30 секунд соберите больше звёзд�
 export function createInterface(actions: InterfaceActions, signal: AbortSignal) {
   const root = document.createElement('main')
   root.className = 'game'
+  root.inert = true
   root.innerHTML = `
     <div class="arena" role="img" aria-label="Арена с двумя бумажными самолётиками и звёздочками"></div>
     <form class="game-menu">
@@ -49,7 +50,7 @@ export function createInterface(actions: InterfaceActions, signal: AbortSignal) 
       <p>Коснитесь или потяните<br>в сторону полёта</p>
     </div>
     <footer class="game-footer">
-      <p class="game-status" role="status">Загружаем арену…</p>
+      <p class="game-status" role="status"></p>
       <p class="game-shortcuts" hidden><kbd>WASD</kbd> <span>или</span> <kbd>↑ ↓ ← →</kbd></p>
     </footer>`
 
@@ -140,7 +141,10 @@ export function createInterface(actions: InterfaceActions, signal: AbortSignal) 
 
   const round = {
     announce,
-    setStartEnabled(value: boolean) { play.disabled = !value },
+    enableStart() {
+      root.inert = false
+      play.disabled = false
+    },
     showFrame(frame: MatchFrame) {
       hud.showScore(frame)
       if (frame.phase !== 'finished') hud.showCountdown(frame)

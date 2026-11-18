@@ -10,8 +10,21 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./style.css">
-  <script type="module" src="/src/app/main.ts"></script>
+  <script type="module">
+    const loading = document.querySelector('.game-loading')
+    import('/src/app/main.ts').then(() => {
+      loading.hidden = true
+    }, error => {
+      loading.querySelector('.game-loading-spinner').hidden = true
+      loading.querySelector('[role="status"]').textContent = 'Не удалось загрузить игру.'
+      console.error(error)
+    })
+  </script>
 </head>
 <body>
+  <div class="game-loading">
+    <span class="game-loading-spinner" aria-hidden="true"></span>
+    <p role="status">Загружаем арену…</p>
+  </div>
 </body>
 </html>

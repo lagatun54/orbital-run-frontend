@@ -21,6 +21,39 @@
 body { margin: 0; }
 [hidden] { display: none !important; }
 
+.game-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: calc(2 * var(--space));
+  padding: calc(2 * var(--space));
+  background: var(--paper-field);
+  color: var(--ink);
+  text-align: center;
+  font: 600 16px/1.45 var(--mono);
+}
+
+.game-loading p { margin: 0; }
+
+.game-loading-spinner {
+  inline-size: calc(4 * var(--space));
+  block-size: calc(4 * var(--space));
+  border: 2px solid var(--line);
+  border-block-start-color: var(--blue);
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .game-loading-spinner { animation: loading-spin 850ms linear infinite; }
+}
+
+@keyframes loading-spin {
+  to { transform: rotate(1turn); }
+}
+
 .game {
   --gutter: clamp(16px, 3vw, 40px);
   isolation: isolate;

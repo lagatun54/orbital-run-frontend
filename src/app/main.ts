@@ -76,7 +76,7 @@ try {
     })
     controls.bindKeyboard(controller.isActive, signal)
     store.transition({ phase: 'ready', mode: backendOrigin ? 'online' : 'local' })
-    ui.round.setStartEnabled(true)
+    ui.round.enableStart()
     ui.round.announce(backendOrigin ? 'Арена готова.' : 'Доступна локальная игра с ботом.')
   }
 } catch (error) {
@@ -84,7 +84,6 @@ try {
     disposeGame()
     controller = undefined
     store.transition({ phase: 'error', error })
-    ui.round.announce('Не удалось загрузить игру.')
-    console.error(error)
+    throw error
   }
 }
