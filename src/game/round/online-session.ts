@@ -1,9 +1,10 @@
 import { CRYSTAL_COUNT } from '../arena/constants.js'
-import type { Point } from '../arena/interfaces/frame.js'
+import type { Point, ShipPose } from '../arena/interfaces/frame.js'
 import type { RoundUpdate } from './interfaces/events.js'
 import type { MatchFrame, MatchResult, PilotState } from './interfaces/match.js'
 import type { StartRound } from './interfaces/session.js'
 import { isRecord, isFiniteNumber, isScore } from '../../shared/validation.js'
+import { createPlayerPrediction } from './player-prediction.js'
 
 export function createOnlineMatch(origin: string): StartRound {
   return (name, emit) => {
@@ -11,6 +12,32 @@ export function createOnlineMatch(origin: string): StartRound {
     endpoint.protocol = endpoint.protocol === 'https:' ? 'wss:' : 'ws:'
     const socket = new WebSocket(endpoint)
     const timeout = window.setTimeout(() => socket.close(), 6000)
+    let direction = 0
+    let frame: MatchFrame | undefined
+    let prediction: ReturnType<typeof createPlayerPrediction> | undefined
+    let shownPose: ShipPose | undefined
+    let request: number | undefined
+
+    function showPrediction(now: number) {
+      if (!frame || !prediction) return
+      const pose = prediction.step(now)
+      if (pose === shownPose) return
+      shownPose = pose
+      emit({ kind: 'frame', frame: { ...frame, player: { ...pose, score: frame.player.score } } })
+    }
+
+    function tick() {
+      request = requestAnimationFrame(tick)
+      showPrediction(performance.now())
+    }
+
+    function stopPrediction() {
+      if (request !== undefined) cancelAnimationFrame(request)
+      request = undefined
+      prediction = undefined
+      frame = undefined
+      shownPose = undefined
+    }
 
     socket.addEventListener('open', () => socket.send(JSON.stringify({ name })))
     socket.addEventListener('message', event => {
@@ -20,18 +47,39 @@ export function createOnlineMatch(origin: string): StartRound {
         return
       }
       window.clearTimeout(timeout)
+      if (update.kind === 'frame' && update.frame.phase === 'playing') {
+        const now = performance.now()
+        frame = update.frame
+        if (!prediction) {
+          prediction = createPlayerPrediction(frame.player, now, direction)
+          request = requestAnimationFrame(tick)
+        } else {
+          prediction.receive(frame.player, now)
+        }
+        shownPose = undefined
+        showPrediction(now)
+        return
+      }
+      if (update.kind === 'online-result') stopPrediction()
       emit(update)
     })
     socket.addEventListener('close', () => {
       window.clearTimeout(timeout)
+      stopPrediction()
       emit({ kind: 'disconnected' })
     })
 
     return {
-      setDirection(direction) {
+      setDirection(value) {
+        direction = value
+        prediction?.setDirection(value, performance.now())
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ direction }))
       },
-      close() { socket.close() },
+      close() {
+        stopPrediction()
+        window.clearTimeout(timeout)
+        socket.close()
+      },
     }
   }
 }

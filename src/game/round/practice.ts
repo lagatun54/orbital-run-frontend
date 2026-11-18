@@ -1,4 +1,4 @@
-import { Direction } from '../direction.js'
+import { directionVector } from '../direction.js'
 
 import { ARENA_WIDTH as WIDTH, ARENA_HEIGHT as HEIGHT, CRYSTAL_COUNT } from '../arena/constants.js'
 import type { Point } from '../arena/interfaces/frame.js'
@@ -51,9 +51,8 @@ export function createLocalMatch(started: number): (now: number, direction: numb
     const screenScale = Math.max(scaleX, scaleY)
     const artworkScale = Math.min(scaleX, scaleY)
     const pickupRadiusSquared = ((Math.max(52 * artworkScale, 42) + Math.max(32 * artworkScale, 26)) * 0.4) ** 2
-    const horizontal = Number(Boolean(direction & Direction.Right)) - Number(Boolean(direction & Direction.Left))
-    const vertical = Number(Boolean(direction & Direction.Down)) - Number(Boolean(direction & Direction.Up))
-    move(player, horizontal, vertical, PLAYER_SPEED * elapsed * screenScale, scaleX, scaleY)
+    const input = directionVector(direction)
+    move(player, input.x, input.y, PLAYER_SPEED * elapsed * screenScale, scaleX, scaleY)
     const target = crystals.reduce((nearest, point) => distanceSquared(bot, point) < distanceSquared(bot, nearest) ? point : nearest)
     const dx = (target.x - bot.x) * scaleX
     const dy = (target.y - bot.y) * scaleY

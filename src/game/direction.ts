@@ -5,3 +5,10 @@ export const Direction = {
   Left: 4,
   Right: 8,
 } as const
+
+export function directionVector(direction: number) {
+  return {
+    x: Number(Boolean(direction & Direction.Right)) - Number(Boolean(direction & Direction.Left)),
+    y: Number(Boolean(direction & Direction.Down)) - Number(Boolean(direction & Direction.Up)),
+  }
+}
