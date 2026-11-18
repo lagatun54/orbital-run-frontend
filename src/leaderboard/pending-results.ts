@@ -1,4 +1,4 @@
-import type { LocalResult } from '../game/round/model.js'
+import type { LocalResult } from '../game/round/interfaces/match.js'
 import { isRecord, isScore } from '../shared/validation.js'
 
 const prefix = 'orbital-run:local-result:'

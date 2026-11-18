@@ -1,12 +1,12 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
-import type { ShipPose } from './model.js'
+import { Container, Sprite } from 'pixi.js'
+import type { ShipPose } from './interfaces/frame.js'
+import type { PlaneTextures } from './interfaces/textures.js'
 import { createWingWake } from './wing-wake.js'
 
 const quarterTurn = Math.PI / 2
 const planeSize = 52
 const headingTolerance = Math.PI / 360
 const flightCycleMS = 680
-export type PlaneTextures = readonly [right: Texture, down: Texture, left: Texture, up: Texture]
 
 export class Plane extends Container {
   private readonly wings = new Container()
@@ -19,13 +19,13 @@ export class Plane extends Container {
   private flightAmount = 0
   private flightPhase = 0
 
-  constructor(private readonly textures: PlaneTextures, wakeColor: number) {
+  constructor(private readonly textures: PlaneTextures, wakeColor: number, useWake: boolean) {
     super()
     this.sprite = new Sprite({ texture: this.textures[0], anchor: 0.5 })
     this.sprite.setSize(planeSize)
     this.wings.addChild(this.sprite)
     this.addChild(this.wings)
-    this.wake = createWingWake(wakeColor)
+    this.wake = createWingWake(wakeColor, useWake)
   }
 
   get wakeLayer() {

@@ -1,4 +1,5 @@
 import { CanvasSource, Container, Mesh, MeshGeometry, Texture } from 'pixi.js'
+import type { InkPoint } from './interfaces/effects.js'
 
 const inkLifeMS = 1_050
 const sampleIntervalMS = 20
@@ -7,21 +8,12 @@ const curveSteps = 5
 const maxSections = maxSamples * (curveSteps + 1)
 const wingTips = [{ x: -17, y: -15 }, { x: -17, y: 15 }]
 
-interface InkPoint {
-  x: number
-  y: number
-  time: number
-  distance: number
-  start: boolean
-}
-
 let inkTexture: Texture | undefined
 
-export function createWingWake(color: number) {
+export function createWingWake(color: number, enabled: boolean) {
   const layer = new Container()
-  const texture = inkTexture ??= createInkTexture()
-  const ribbons = wingTips.map(tip => {
-    const ribbon = createRibbon(texture, color)
+  const ribbons = (enabled ? wingTips : []).map(tip => {
+    const ribbon = createRibbon(inkTexture ??= createInkTexture(), color)
     layer.addChild(ribbon.mesh)
     return { tip, ribbon }
   })

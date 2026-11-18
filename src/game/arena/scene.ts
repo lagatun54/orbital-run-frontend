@@ -1,14 +1,14 @@
 import { Application, Graphics, RendererType } from 'pixi.js'
 import { createSceneView, initEngineApplication } from '../../vendor/scene-engine.mjs'
 import { Plane } from './plane.js'
-import { loadArenaTextures } from './textures.js'
+import { loadGameTextures } from '../textures.js'
 import { createStarPickups } from './star-pickups.js'
-import {
-  ARENA_WIDTH as width, ARENA_HEIGHT as height,
-  type ArenaFrame, type ArenaRenderer, type Point, type ShipPose,
-} from './model.js'
+import { ARENA_WIDTH as width, ARENA_HEIGHT as height } from './constants.js'
+import type { ArenaFrame, ArenaProjection, ArenaRenderer, ShipPose } from './interfaces/frame.js'
 
 const paper = { background: 0xfbf7eb, grid: 0xc9d6de, margin: 0xdb9d99, cell: 30 }
+const menuFPS = 30
+const renderResolution = () => Math.min(window.devicePixelRatio, 2)
 
 const arena = {
   name: 'orbital-arena',
@@ -20,13 +20,12 @@ const arena = {
   },
 }
 
-export async function createScene(
-  host: HTMLElement,
-): Promise<ArenaRenderer & { destroy(): void }> {
+export async function createScene(host: HTMLElement, artwork: Iterable<HTMLCanvasElement>): Promise<ArenaRenderer> {
   const app = new Application()
   const view = createSceneView(arena)
   const listeners = new AbortController()
   let observer: ResizeObserver | undefined
+  let destroyTextures: (() => void) | undefined
 
   function destroy() {
     if (listeners.signal.aborted) return
@@ -34,30 +33,34 @@ export async function createScene(
     observer?.disconnect()
     view.destroy()
     if (app.renderer) app.destroy(true, { children: true })
+    destroyTextures?.()
   }
 
   try {
     await initEngineApplication(app, {
       width, height, background: paper.background, antialias: true,
-      renderer: 'auto', autoDensity: true, resolution: devicePixelRatio,
+      renderer: 'auto', autoDensity: true, resolution: renderResolution(), autoStart: false,
     })
-    const textures = await loadArenaTextures()
+    const textures = await loadGameTextures(app.renderer, artwork)
+    destroyTextures = textures.destroy
+    const supportsMesh = app.renderer.type !== RendererType.CANVAS
     const field = new Graphics()
     app.stage.addChild(field, view.container)
     const scene = populateArena(
       view,
-      new Plane(textures.player, 0x4779bc),
-      new Plane(textures.bot, 0xc57461),
+      new Plane(textures.player, 0x4779bc, supportsMesh),
+      new Plane(textures.bot, 0xc57461, supportsMesh),
       createStarPickups(textures.star, app.renderer.type === RendererType.WEBGL),
     )
     await view.init()
+    app.ticker.maxFPS = menuFPS
     app.ticker.add(({ deltaMS }) => scene.update(deltaMS))
     host.prepend(app.canvas)
 
     function resize() {
       const { clientWidth, clientHeight } = host
       if (!clientWidth || !clientHeight) return
-      app.renderer.resize(clientWidth, clientHeight, window.devicePixelRatio)
+      app.renderer.resize(clientWidth, clientHeight, renderResolution())
       drawGrid(field, clientWidth, clientHeight)
       scene.layout(clientWidth, clientHeight)
     }
@@ -66,7 +69,12 @@ export async function createScene(
     observer.observe(host)
     resize()
     window.addEventListener('resize', resize, { signal: listeners.signal })
-    return { render: scene.render, destroy }
+    app.start()
+    return {
+      render: scene.render,
+      setRoundActive(active) { app.ticker.maxFPS = active ? 0 : menuFPS },
+      destroy,
+    }
   } catch (error) {
     destroy()
     throw error
@@ -100,19 +108,14 @@ function populateArena(
 
   let source: ArenaFrame | undefined
   let poses: { player: ShipPose; bot: ShipPose } | undefined
-  let scaleX = 1
-  let scaleY = 1
-  let offsetX = 0
-  let offsetY = 0
+  const projection: ArenaProjection = { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 }
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
 
-  function project({ x, y }: Point): Point {
-    return { x: x * scaleX + offsetX, y: y * scaleY + offsetY }
-  }
-
   function projectPose(pose: ShipPose): ShipPose {
+    const { scaleX, scaleY, offsetX, offsetY } = projection
     return {
-      ...project(pose),
+      x: pose.x * scaleX + offsetX,
+      y: pose.y * scaleY + offsetY,
       angle: Math.atan2(Math.sin(pose.angle) * scaleY, Math.cos(pose.angle) * scaleX),
     }
   }
@@ -124,7 +127,7 @@ function populateArena(
       player.reset(poses.player)
       bot.reset(poses.bot)
     }
-    pickups.setPoints(next.crystals.map(project), reset, reducedMotion.matches)
+    pickups.setPoints(next.crystals, projection, reset, reducedMotion.matches)
   }
 
   return {
@@ -140,10 +143,15 @@ function populateArena(
       view.layout(viewWidth, viewHeight)
       // Map match positions across the screen while keeping the artwork uniformly scaled.
       const { x, y, scale } = refs.field
-      scaleX = viewWidth / (width * scale.x)
-      scaleY = viewHeight / (height * scale.y)
-      offsetX = -x / scale.x
-      offsetY = -y / scale.y
+      // Keep small-screen artwork readable without changing game coordinates.
+      const artworkScale = Math.max(1, 42 / (52 * scale.x))
+      player.scale.set(artworkScale)
+      bot.scale.set(artworkScale)
+      pickups.setSizeMultiplier(Math.max(1, 26 / (32 * scale.x)))
+      projection.scaleX = viewWidth / (width * scale.x)
+      projection.scaleY = viewHeight / (height * scale.y)
+      projection.offsetX = -x / scale.x
+      projection.offsetY = -y / scale.y
       if (source) render(source, true)
     },
   }

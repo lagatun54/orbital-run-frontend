@@ -1,4 +1,4 @@
-import type { LeaderboardEntry, LeaderboardView } from '../../leaderboard/sync.js'
+import type { LeaderboardEntry, LeaderboardView } from '../../leaderboard/interfaces/leaderboard.js'
 
 const previewSize = 10
 

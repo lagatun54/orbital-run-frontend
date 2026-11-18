@@ -1,5 +1,6 @@
 import { Container, Filter, Sprite, UniformGroup, defaultFilterVert, type Texture } from 'pixi.js'
-import { CRYSTAL_COUNT, type Point } from './model.js'
+import { CRYSTAL_COUNT } from './constants.js'
+import type { ArenaProjection, Point } from './interfaces/frame.js'
 import { createPickupBursts } from './pickup-burst.js'
 
 const starSize = 32
@@ -15,49 +16,62 @@ export function createStarPickups(texture: Texture, useShader: boolean) {
   layer.addChild(bursts.layer)
   let litStar: Sprite | undefined
   let elapsed = 0
+  let sizeMultiplier = 1
 
   const stars = Array.from({ length: CRYSTAL_COUNT }, () => {
     const sprite = new Sprite({ texture, anchor: 0.5 })
     sprite.scale.set(baseScale)
     sprite.visible = false
     layer.addChild(sprite)
-    return { sprite, point: undefined as Point | undefined, spawned: -spawnMS }
+    return { sprite, position: { x: 0, y: 0 }, spawned: -spawnMS }
   })
 
   layer.once('destroyed', () => shine?.filter.destroy())
 
-  function setPoints(points: ReadonlyArray<Point>, reset: boolean, reducedMotion: boolean) {
+  function setPoints(
+    points: ReadonlyArray<Point>,
+    { scaleX, scaleY, offsetX, offsetY }: ArenaProjection,
+    reset: boolean,
+    reducedMotion: boolean,
+  ) {
     if (reset) bursts.clear()
 
-    stars.forEach((star, index) => {
+    for (let index = 0; index < stars.length; index++) {
+      const star = stars[index]!
+      const { sprite, position } = star
       const point = points[index]
-      const previous = star.point
-      star.point = point
-      star.sprite.visible = point !== undefined
-      if (point) star.sprite.position.set(point.x, point.y)
+      const x = point ? point.x * scaleX + offsetX : undefined
+      const y = point ? point.y * scaleY + offsetY : undefined
       if (reset) {
         star.spawned = elapsed - spawnMS
-      } else if (previous && (previous.x !== point?.x || previous.y !== point?.y) && !reducedMotion) {
-        bursts.play(previous, index)
+      } else if (sprite.visible && !reducedMotion && (position.x !== x || position.y !== y)) {
+        bursts.play(position, index)
         star.spawned = elapsed
       }
-    })
+      sprite.visible = point !== undefined
+      if (x !== undefined && y !== undefined) {
+        position.x = x
+        position.y = y
+        sprite.position.set(x, y)
+      }
+    }
   }
 
   function update(deltaMS: number, reducedMotion: boolean) {
     elapsed += deltaMS
-    stars.forEach(({ sprite, point, spawned }, index) => {
-      if (!point) return
+    for (let index = 0; index < stars.length; index++) {
+      const { sprite, position, spawned } = stars[index]!
+      if (!sprite.visible) continue
       const phase = elapsed / 410 + index * 1.73
       const appear = reducedMotion ? 1 : Math.min((elapsed - spawned) / spawnMS, 1)
       const spring = (1 - appear) ** 2
       const pop = 1 - 0.43 * spring * Math.cos(appear * Math.PI * 2.8)
       const stretch = 0.18 * spring * Math.sin(appear * Math.PI * 3)
       const pulse = reducedMotion ? 1 : 1 + 0.035 * Math.sin(phase)
-      sprite.y = point.y + (reducedMotion ? 0 : 2.4 * Math.sin(phase))
+      sprite.y = position.y + (reducedMotion ? 0 : 2.4 * Math.sin(phase))
       sprite.rotation = reducedMotion ? 0 : 0.12 * Math.sin(phase * 0.8)
-      sprite.scale.set(baseScale * pulse * (pop - stretch), baseScale * pulse * (pop + stretch))
-    })
+      sprite.scale.set(baseScale * sizeMultiplier * pulse * (pop - stretch), baseScale * sizeMultiplier * pulse * (pop + stretch))
+    }
 
     bursts.update(deltaMS, reducedMotion)
 
@@ -73,7 +87,10 @@ export function createStarPickups(texture: Texture, useShader: boolean) {
     shine.uniforms.uSweep = sweep
   }
 
-  return { layer, setPoints, update }
+  return {
+    layer, setPoints, update,
+    setSizeMultiplier(value: number) { sizeMultiplier = value },
+  }
 }
 
 function createPaperShine() {

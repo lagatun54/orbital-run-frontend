@@ -1,5 +1,7 @@
 import { Container, Graphics } from 'pixi.js'
-import { CRYSTAL_COUNT, type Point } from './model.js'
+import type { BurstDrawing } from './interfaces/effects.js'
+import { CRYSTAL_COUNT } from './constants.js'
+import type { Point } from './interfaces/frame.js'
 
 const durationMS = 540
 const ink = 0x936026
@@ -65,11 +67,6 @@ export function createPickupBursts() {
       }
     },
   }
-}
-
-interface BurstDrawing {
-  marks: Graphics
-  pieces: ReadonlyArray<{ drawing: Graphics, angle: number, x: number, y: number, size: number, turn: number }>
 }
 
 function animateBurst({ marks, pieces }: BurstDrawing, progress: number) {

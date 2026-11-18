@@ -1,9 +1,5 @@
 import { Direction } from '../direction.js'
-
-interface JoystickActions {
-  press(pointer: number, direction: number): void
-  release(pointer: number): void
-}
+import type { JoystickActions } from './interfaces/actions.js'
 
 const diagonalThreshold = Math.tan(Math.PI / 8)
 
@@ -20,7 +16,7 @@ export function createJoystick(actions: JoystickActions, signal: AbortSignal) {
       <path class="joystick-ticks" d="M32 32l4 4m48 48 4 4m0-56-4 4M36 84l-4 4" />
       <path class="joystick-marks" d="m56 16 4-4 4 4m40 40 4 4-4 4M56 104l4 4 4-4M16 56l-4 4 4 4" />
     </svg>
-    <div class="joystick-knob" aria-hidden="true"></div>`
+    <div class="joystick-knob" aria-hidden="true"><canvas data-artwork="paper-star"></canvas></div>`
   const knob = root.querySelector<HTMLElement>('.joystick-knob')!
   let available = false
   let enabled = false

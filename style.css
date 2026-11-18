@@ -10,12 +10,6 @@
   --blue: oklch(0.45 0.137 252);
   --blue-pale: oklch(0.91 0.05 239);
   --coral: oklch(0.48 0.135 35);
-  --blue-plane: url('./src/game/arena/assets/player-plane-right.webp');
-  --coral-plane: url('./src/game/arena/assets/enemy-plane-left.webp');
-  --star: url('./src/game/arena/assets/paper-star.webp');
-  --flight-sheet: url('./src/game/ui/assets/flight-sheet.webp');
-  --score-strip: url('./src/game/ui/assets/score-strip.webp');
-  --launch-paper: url('./src/game/ui/assets/launch-paper.webp');
   --heading: "Nunito", sans-serif;
   --mono: "IBM Plex Mono", monospace;
   --digits: "Barlow Condensed", var(--heading);
@@ -86,21 +80,17 @@ body { margin: 0; }
   isolation: isolate;
 }
 
-.scoreboard::before, .game-menu::before {
-  content: "";
+.paper-sheet {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: -1;
   pointer-events: none;
-  background: var(--sheet) center / 100% 100% no-repeat;
   filter: saturate(var(--sheet-saturation, 1)) drop-shadow(1px 3px 1px oklch(0.29 0.047 249 / 24%));
 }
 
-.scoreboard { --sheet: var(--score-strip); }
-.game-menu {
-  --sheet: var(--flight-sheet);
-  --sheet-saturation: 0.65;
-}
+.game-menu { --sheet-saturation: 0.65; }
 
 .scoreboard b {
   display: block;
@@ -121,16 +111,14 @@ body { margin: 0; }
 
 .score-side span { grid-area: label; }
 .score-side b { grid-area: score; }
-.score-side::before {
-  content: "";
+.score-plane {
   grid-area: plane;
   width: clamp(22px, 6vw, 36px);
   aspect-ratio: 1;
-  background: var(--plane) center / contain no-repeat;
 }
 
-.score-you { --plane: var(--blue-plane); color: var(--blue); }
-.score-bot { --plane: var(--coral-plane); color: var(--coral); }
+.score-you { color: var(--blue); }
+.score-bot { color: var(--coral); }
 
 .score-clock {
   padding-block: 2px;
@@ -213,25 +201,21 @@ body { margin: 0; }
 .flight-plane, .flight-star {
   aspect-ratio: 1;
   translate: -50% -50%;
-  background: var(--graphic) center / contain no-repeat;
 }
 
 .flight-plane-you {
-  --graphic: var(--blue-plane);
   width: 34%;
   left: 26%;
   top: 47%;
   rotate: -19deg;
 }
 .flight-plane-bot {
-  --graphic: var(--coral-plane);
   width: 29%;
   left: 76%;
   top: 55%;
   rotate: -16deg;
 }
 .flight-star {
-  --graphic: var(--star);
   width: clamp(40px, 12%, 60px);
   left: 53%;
   top: 43%;
@@ -308,6 +292,7 @@ body { margin: 0; }
 }
 .game-menu input::placeholder { color: var(--muted); opacity: 1; }
 .game-menu input:hover, .game-menu input:focus { border-color: var(--blue); }
+.game .pilot-field input:focus-visible { outline: none; }
 
 .game-menu .launch-button {
   position: relative;
@@ -326,12 +311,13 @@ body { margin: 0; }
   cursor: pointer;
 }
 
-.launch-button::before {
-  content: "";
+.launch-paper {
   position: absolute;
   z-index: -1;
   inset: -1px -3px;
-  background: var(--launch-paper) center / 100% 100% no-repeat;
+  width: calc(100% + 6px);
+  height: calc(100% + 2px);
+  pointer-events: none;
   filter: brightness(var(--launch-brightness, 1)) drop-shadow(0 1px 0 oklch(0.45 0.137 252 / 35%));
   rotate: -1.5deg;
 }
@@ -345,8 +331,18 @@ body { margin: 0; }
 .launch-plane {
   position: absolute;
   inset: 0;
-  background: var(--blue-plane) center / contain no-repeat;
+  width: 100%;
+  height: 100%;
   transform: rotate(-17deg);
+}
+
+.launch-glint {
+  position: absolute;
+  bottom: 150%;
+  left: 90%;
+  width: 17px;
+  aspect-ratio: 1;
+  opacity: 0;
 }
 
 .launch-button:hover:not(:disabled) { --launch-brightness: 0.97; }
@@ -369,14 +365,10 @@ body { margin: 0; }
     animation: paper-takeoff var(--launch-duration) cubic-bezier(0.42, 0, 0.48, 1) both;
   }
 
-  .is-launching .launch-mark::before,
-  .is-launching .launch-mark::after {
+  .is-launching .launch-mark::before {
     content: "";
     position: absolute;
     opacity: 0;
-  }
-
-  .is-launching .launch-mark::before {
     bottom: 56%;
     left: 45%;
     width: 24px;
@@ -388,12 +380,7 @@ body { margin: 0; }
     animation: launch-ink var(--launch-duration) ease-out both;
   }
 
-  .is-launching .launch-mark::after {
-    bottom: 150%;
-    left: 90%;
-    width: 17px;
-    aspect-ratio: 1;
-    background: var(--star) center / contain no-repeat;
+  .is-launching .launch-glint {
     animation: launch-glint var(--launch-duration) ease-out both;
   }
 
@@ -447,9 +434,10 @@ body { margin: 0; }
 .result-bot { color: var(--coral); }
 
 .flight-controls {
-  grid-area: tools;
-  align-self: end;
-  justify-self: start;
+  position: fixed;
+  z-index: 2;
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(12px + env(safe-area-inset-bottom));
   display: grid;
   justify-items: center;
   row-gap: 4px;
@@ -463,7 +451,16 @@ body { margin: 0; }
   font: 600 12px/1.35 var(--heading);
 }
 
-.flight-controls p { text-align: center; }
+.flight-controls p { grid-row: 1; text-align: center; pointer-events: none; }
+
+.is-playing .game-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 .game-footer {
   grid-area: footer;
@@ -584,7 +581,7 @@ button.leaderboard-title:active { background: var(--line); }
 
 .joystick {
   position: relative;
-  width: clamp(104px, 30vw, 132px);
+  width: clamp(128px, 36vw, 160px);
   aspect-ratio: 1;
   touch-action: none;
   user-select: none;
@@ -621,11 +618,9 @@ button.leaderboard-title:active { background: var(--line); }
   transform: translate(calc(-50% + var(--stick-x, 0px)), calc(-50% + var(--stick-y, 0px)));
 }
 
-.joystick-knob::before {
-  content: "";
+.joystick-knob canvas {
   width: 46%;
   aspect-ratio: 1;
-  background: var(--star) center / contain no-repeat;
 }
 .joystick.is-held .joystick-knob { background: var(--line); box-shadow: 0 1px var(--ink); }
 
@@ -683,7 +678,7 @@ button.leaderboard-title:active { background: var(--line); }
   }
   .game-menu h1 { font-size: clamp(22px, 4vw, 32px); }
   .mission { font-size: 14px; }
-  .joystick { width: clamp(88px, 28dvh, 112px); }
-  .flight-controls { grid-auto-flow: column; align-items: end; gap: var(--space); }
+  .joystick { width: clamp(112px, 40dvh, 150px); }
+  .flight-controls p { display: none; }
   .is-compact .leaderboard { max-height: 42dvh; }
 }

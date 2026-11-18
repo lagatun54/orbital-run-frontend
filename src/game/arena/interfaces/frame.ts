@@ -1,10 +1,13 @@
-export const ARENA_WIDTH = 960
-export const ARENA_HEIGHT = 540
-export const CRYSTAL_COUNT = 7
-
 export interface Point {
   readonly x: number
   readonly y: number
+}
+
+export interface ArenaProjection {
+  scaleX: number
+  scaleY: number
+  offsetX: number
+  offsetY: number
 }
 
 export interface ShipPose extends Point {
@@ -19,4 +22,6 @@ export interface ArenaFrame {
 
 export interface ArenaRenderer {
   render(frame: ArenaFrame, reset?: boolean): void
+  setRoundActive(active: boolean): void
+  destroy(): void
 }

@@ -2,7 +2,7 @@ import { Code, ConnectError, createClient } from '@connectrpc/connect'
 import { createGrpcWebTransport } from '@connectrpc/connect-web'
 import { LeaderboardService } from '../gen/scores/v1/leaderboard_service_pb.js'
 import { ResultsService } from '../gen/scores/v1/results_service_pb.js'
-import type { ScoresApi } from './sync.js'
+import type { ScoresApi } from './interfaces/scores-api.js'
 
 export function createScoresApi(origin: string): ScoresApi {
   const transport = createGrpcWebTransport({ baseUrl: origin })

@@ -1,37 +1,16 @@
-import type { RoundResults } from '../game/round/controller.js'
-import type { LocalResult } from '../game/round/model.js'
+import type { RoundEvent } from '../game/round/interfaces/events.js'
+import type { LeaderboardView } from './interfaces/leaderboard.js'
+import type { ScoresApi } from './interfaces/scores-api.js'
 import { forgetLocalResult, pendingLocalResults, saveLocalResult } from './pending-results.js'
-
-export interface LeaderboardEntry {
-  id: string
-  name: string
-  score: number
-  local: boolean
-}
-
-export interface LeaderboardView {
-  showEntries(entries: readonly LeaderboardEntry[], selectedId?: string): void
-  showState(message: string): void
-  hideResult(clearSelection: boolean): void
-  showRank(rank: number, score: number): void
-  announce(message: string): void
-}
-
-export interface ScoresApi {
-  entries(signal: AbortSignal): Promise<readonly LeaderboardEntry[]>
-  submit(result: LocalResult, signal: AbortSignal): Promise<'saved' | 'rejected' | 'unavailable'>
-  rank(id: string, signal: AbortSignal, timeoutMs: number): Promise<
-    { place: number; score: number } | 'retry' | 'unavailable'
-  >
-}
 
 export function createLeaderboard(
   api: ScoresApi | null,
   view: LeaderboardView,
   signal: AbortSignal,
-): RoundResults {
+) {
   let selectedId: string | undefined
   let syncing = false
+  let roundGeneration = 0
   let latestLocal: { id: string; isCurrent: () => boolean } | undefined
 
   if (!api) {
@@ -46,12 +25,28 @@ export function createLeaderboard(
   }
 
   return {
-    clear(online) {
-      if (online) selectedId = undefined
-      view.hideResult(online)
-    },
-    online(id, isCurrent) { void waitForResult(id, isCurrent) },
-    local(result, isCurrent) {
+    handleEvent(event: RoundEvent) {
+      if (event.kind === 'starting') {
+        roundGeneration++
+        if (event.mode === 'local') view.hideResult(false)
+        return
+      }
+      if (event.kind !== 'finished') return
+
+      const generation = roundGeneration
+      const isCurrent = () => !signal.aborted && generation === roundGeneration
+      const { completion } = event
+      if (completion.kind === 'online-result') {
+        selectedId = undefined
+        view.hideResult(true)
+        view.announce(completion.queued
+          ? 'Результат отправлен в таблицу рекордов.'
+          : 'Сервис рекордов недоступен. Очки показаны на табло.')
+        if (completion.queued) void waitForResult(completion.result.id, isCurrent)
+        return
+      }
+
+      const { result } = completion
       latestLocal = { id: result.id, isCurrent }
       const stored = saveLocalResult(result)
       if (!api) {

@@ -1,12 +1,12 @@
-import { CRYSTAL_COUNT, type Point } from '../arena/model.js'
-import {
-  type MatchFrame, type MatchResult, type PilotState,
-  type RoundUpdate, type StartRound,
-} from './model.js'
+import { CRYSTAL_COUNT } from '../arena/constants.js'
+import type { Point } from '../arena/interfaces/frame.js'
+import type { RoundUpdate } from './interfaces/events.js'
+import type { MatchFrame, MatchResult, PilotState } from './interfaces/match.js'
+import type { StartRound } from './interfaces/session.js'
 import { isRecord, isFiniteNumber, isScore } from '../../shared/validation.js'
 
 export function createOnlineMatch(origin: string): StartRound {
-  return (name, events) => {
+  return (name, emit) => {
     const endpoint = new URL('/ws', origin)
     endpoint.protocol = endpoint.protocol === 'https:' ? 'wss:' : 'ws:'
     const socket = new WebSocket(endpoint)
@@ -20,11 +20,11 @@ export function createOnlineMatch(origin: string): StartRound {
         return
       }
       window.clearTimeout(timeout)
-      events.update(update)
+      emit(update)
     })
     socket.addEventListener('close', () => {
       window.clearTimeout(timeout)
-      events.disconnect()
+      emit({ kind: 'disconnected' })
     })
 
     return {
