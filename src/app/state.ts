@@ -1,24 +1,33 @@
-import type { MatchFrame, MatchResult } from '../game/round/model.js'
+import { subscribeWithSelector } from 'zustand/middleware'
+import { createStore } from 'zustand/vanilla'
+import type { RoundUpdate } from '../game/round/interfaces/events.js'
+import type { MatchFrame, MatchMode } from '../game/round/interfaces/match.js'
+import type { AppState } from './interfaces/state.js'
 
-export type MatchMode = 'online' | 'local'
+export function createAppStore() {
+  const store = createStore<AppState>()(subscribeWithSelector<AppState>(() => ({ phase: 'loading' })))
+  let latestFrame: MatchFrame | undefined
 
-export type AppState = Readonly<
-  | { phase: 'loading' }
-  | { phase: 'error'; error: unknown }
-  | { phase: 'ready'; mode: MatchMode; reason?: 'disconnected' }
-  | { phase: 'connecting'; mode: 'online' }
-  | { phase: 'starting'; mode: 'local' }
-  | { phase: MatchFrame['phase']; mode: MatchMode; frame: MatchFrame; result?: MatchResult }
->
-
-export interface AppStateStore {
-  get(): AppState
-  set(state: AppState): void
-}
-
-let current: AppState = { phase: 'loading' }
-
-export const appState: AppStateStore = {
-  get: () => current,
-  set(state) { current = state },
+  return {
+    getState: store.getState,
+    subscribe: store.subscribe,
+    getSnapshot() {
+      const state = store.getState()
+      return latestFrame ? { ...state, frame: latestFrame } : state
+    },
+    transition(state: AppState) {
+      latestFrame = undefined
+      store.setState(state, true)
+    },
+    updateRound(update: RoundUpdate, mode: MatchMode) {
+      latestFrame = update.frame
+      const { phase } = update.frame
+      if (phase === store.getState().phase) return
+      if (phase === 'finished' && update.kind !== 'frame') {
+        store.setState({ phase, mode, result: update.result }, true)
+      } else {
+        store.setState({ phase, mode }, true)
+      }
+    },
+  }
 }

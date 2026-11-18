@@ -1,38 +1,19 @@
-import { Code, ConnectError, createClient } from '@connectrpc/connect'
-import { createGrpcWebTransport } from '@connectrpc/connect-web'
-import { LeaderboardService } from '../gen/scores/v1/leaderboard_service_pb.js'
-import { ResultsService } from '../gen/scores/v1/results_service_pb.js'
-import type { RoundResults } from '../game/round/controller.js'
+import type { RoundEvent } from '../game/round/interfaces/events.js'
+import type { LeaderboardView } from './interfaces/leaderboard.js'
+import type { ScoresApi } from './interfaces/scores-api.js'
 import { forgetLocalResult, pendingLocalResults, saveLocalResult } from './pending-results.js'
 
-export interface LeaderboardEntry {
-  id: string
-  name: string
-  score: number
-  local: boolean
-}
-
-export interface LeaderboardView {
-  showEntries(entries: readonly LeaderboardEntry[], selectedId?: string): void
-  showState(message: string): void
-  hideResult(clearSelection: boolean): void
-  showRank(rank: number, score: number): void
-  announce(message: string): void
-}
-
 export function createLeaderboard(
-  origin: string | null,
+  api: ScoresApi | null,
   view: LeaderboardView,
   signal: AbortSignal,
-): RoundResults {
-  const transport = origin === null ? null : createGrpcWebTransport({ baseUrl: origin })
-  const leaderboard = transport && createClient(LeaderboardService, transport)
-  const results = transport && createClient(ResultsService, transport)
+) {
   let selectedId: string | undefined
   let syncing = false
+  let roundGeneration = 0
   let latestLocal: { id: string; isCurrent: () => boolean } | undefined
 
-  if (origin === null) {
+  if (!api) {
     showLocalEntries()
   } else {
     void refresh()
@@ -44,15 +25,31 @@ export function createLeaderboard(
   }
 
   return {
-    clear(online) {
-      if (online) selectedId = undefined
-      view.hideResult(online)
-    },
-    online(id, isCurrent) { void waitForResult(id, isCurrent) },
-    local(result, isCurrent) {
+    handleEvent(event: RoundEvent) {
+      if (event.kind === 'starting') {
+        roundGeneration++
+        if (event.mode === 'local') view.hideResult(false)
+        return
+      }
+      if (event.kind !== 'finished') return
+
+      const generation = roundGeneration
+      const isCurrent = () => !signal.aborted && generation === roundGeneration
+      const { completion } = event
+      if (completion.kind === 'online-result') {
+        selectedId = undefined
+        view.hideResult(true)
+        view.announce(completion.queued
+          ? 'Результат отправлен в таблицу рекордов.'
+          : 'Сервис рекордов недоступен. Очки показаны на табло.')
+        if (completion.queued) void waitForResult(completion.result.id, isCurrent)
+        return
+      }
+
+      const { result } = completion
       latestLocal = { id: result.id, isCurrent }
       const stored = saveLocalResult(result)
-      if (origin === null) {
+      if (!api) {
         selectedId = result.id
         showLocalEntries()
         view.announce(stored ? 'Рекорд сохранён на этом устройстве.' : 'Рекорд сохранён в этой вкладке.')
@@ -75,9 +72,9 @@ export function createLeaderboard(
   }
 
   async function refresh(): Promise<void> {
-    if (!leaderboard || signal.aborted) return
+    if (!api || signal.aborted) return
     try {
-      const { entries } = await leaderboard.getLeaderboard({}, { signal, timeoutMs: 4000 })
+      const entries = await api.entries(signal)
       if (!signal.aborted) view.showEntries(entries, selectedId)
     } catch {
       if (!signal.aborted) view.showState('Таблица рекордов временно недоступна.')
@@ -85,18 +82,16 @@ export function createLeaderboard(
   }
 
   async function syncLocal(): Promise<void> {
-    if (!results || syncing || signal.aborted) return
+    if (!api || syncing || signal.aborted) return
     syncing = true
     let changed = false
     try {
-      for (const { id, name, score, botScore } of pendingLocalResults()) {
-        try {
-          await results.saveLocalResult({ id, name, score, botScore }, { signal, timeoutMs: 5000 })
-        } catch (error) {
-          // Keep rejected records without holding up the remaining queue.
-          if (ConnectError.from(error).code === Code.InvalidArgument) continue
-          break
-        }
+      for (const result of pendingLocalResults()) {
+        const status = await api.submit(result, signal)
+        // Keep rejected records without holding up the remaining queue.
+        if (status === 'rejected') continue
+        if (status === 'unavailable') break
+        const { id } = result
         forgetLocalResult(id)
         changed = true
         if (latestLocal?.id === id && latestLocal.isCurrent()) {
@@ -110,30 +105,21 @@ export function createLeaderboard(
   }
 
   async function waitForResult(id: string, isCurrent: () => boolean): Promise<void> {
-    if (!results) return
+    if (!api) return
     const deadline = performance.now() + 12_000
     while (!signal.aborted && isCurrent()) {
       const remaining = Math.ceil(deadline - performance.now())
       if (remaining <= 0) break
-      try {
-        const { result, rank } = await results.getResult({ id }, { signal, timeoutMs: Math.min(3000, remaining) })
-        if (signal.aborted || !isCurrent()) return
-        const place = Number(rank)
-        if (result && Number.isSafeInteger(place) && place > 0) {
-          selectedId = id
-          view.showRank(place, result.score)
-          view.announce(`Результат сохранён. Место ${place} в рейтинге.`)
-          void refresh()
-          return
-        }
-        break
-      } catch (error) {
-        const { code } = ConnectError.from(error)
-        // Fetch failures can appear as Unknown when the server is offline.
-        if (code !== Code.NotFound && code !== Code.Unavailable &&
-            code !== Code.DeadlineExceeded && code !== Code.Unknown) break
-      }
+      const rank = await api.rank(id, signal, Math.min(3000, remaining))
       if (signal.aborted || !isCurrent()) return
+      if (rank === 'unavailable') break
+      if (rank !== 'retry') {
+        selectedId = id
+        view.showRank(rank.place, rank.score)
+        view.announce(`Результат сохранён. Место ${rank.place} в рейтинге.`)
+        void refresh()
+        return
+      }
       const delay = Math.min(750, deadline - performance.now())
       if (delay <= 0) break
       await new Promise(resolve => window.setTimeout(resolve, delay))
