@@ -57,8 +57,9 @@ export function createRoundHud() {
         ], { duration: 520, easing: 'cubic-bezier(0.22, 0.72, 0.32, 1)' })
       }
     }
-    if (frame.player.score !== lastPlayerScore) {
-      lastPlayerScore = frame.player.score
+    const displayedScore = frame.player.score + (frame.pendingPickups?.size ?? 0)
+    if (displayedScore !== lastPlayerScore) {
+      lastPlayerScore = displayedScore
       player.textContent = String(lastPlayerScore).padStart(2, '0')
     }
     if (frame.bot.score !== lastBotScore) {

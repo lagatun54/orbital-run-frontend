@@ -11,6 +11,17 @@ export interface MatchFrame extends ArenaFrame {
   readonly remainingMs: number
   readonly player: PilotState
   readonly bot: PilotState
+  readonly crystalVersions?: readonly number[]
+  readonly pickupAcks?: readonly PickupAck[]
+}
+
+export interface PickupClaim {
+  readonly index: number
+  readonly version: number
+}
+
+export interface PickupAck extends PickupClaim {
+  readonly accepted: boolean
 }
 
 export interface MatchResult {

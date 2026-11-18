@@ -30,6 +30,7 @@ export function createStarPickups(texture: Texture, useShader: boolean) {
 
   function setPoints(
     points: ReadonlyArray<Point>,
+    pending: ReadonlySet<number> | undefined,
     { scaleX, scaleY, offsetX, offsetY }: ArenaProjection,
     reset: boolean,
     reducedMotion: boolean,
@@ -42,13 +43,15 @@ export function createStarPickups(texture: Texture, useShader: boolean) {
       const point = points[index]
       const x = point ? point.x * scaleX + offsetX : undefined
       const y = point ? point.y * scaleY + offsetY : undefined
+      const visible = point !== undefined && !pending?.has(index)
+      const moved = position.x !== x || position.y !== y
       if (reset) {
         star.spawned = elapsed - spawnMS
-      } else if (sprite.visible && !reducedMotion && (position.x !== x || position.y !== y)) {
-        bursts.play(position, index)
-        star.spawned = elapsed
+      } else if (!reducedMotion) {
+        if (sprite.visible && (!visible || moved)) bursts.play(position, index)
+        if (visible && (!sprite.visible || moved)) star.spawned = elapsed
       }
-      sprite.visible = point !== undefined
+      sprite.visible = visible
       if (x !== undefined && y !== undefined) {
         position.x = x
         position.y = y

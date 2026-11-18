@@ -18,6 +18,7 @@ export interface ArenaFrame {
   readonly player: ShipPose
   readonly bot: ShipPose
   readonly crystals: ReadonlyArray<Point>
+  readonly pendingPickups?: ReadonlySet<number>
 }
 
 export interface ArenaRenderer {

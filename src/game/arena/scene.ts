@@ -121,13 +121,15 @@ function populateArena(
   }
 
   function render(next: ArenaFrame, reset = false) {
+    if (reset || source?.crystals !== next.crystals || source.pendingPickups !== next.pendingPickups) {
+      pickups.setPoints(next.crystals, next.pendingPickups, projection, reset, reducedMotion.matches)
+    }
     source = next
     poses = { player: projectPose(next.player), bot: projectPose(next.bot) }
     if (reset) {
       player.reset(poses.player)
       bot.reset(poses.bot)
     }
-    pickups.setPoints(next.crystals, projection, reset, reducedMotion.matches)
   }
 
   return {
