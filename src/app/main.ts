@@ -75,7 +75,7 @@ try {
       startOnline: backendOrigin ? createOnlineMatch(backendOrigin) : undefined,
     })
     controls.bindKeyboard(controller.isActive, signal)
-    store.transition({ phase: 'ready', mode: backendOrigin ? 'online' : 'local' })
+    store.events.initialized(backendOrigin ? 'online' : 'local')
     ui.round.enableStart()
     ui.round.announce(backendOrigin ? 'Арена готова.' : 'Доступна локальная игра с ботом.')
   }
@@ -83,7 +83,7 @@ try {
   if (!signal.aborted) {
     disposeGame()
     controller = undefined
-    store.transition({ phase: 'error', error })
+    store.events.initializationFailed(error)
     throw error
   }
 }

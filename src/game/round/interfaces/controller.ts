@@ -5,8 +5,13 @@ import type { RoundState } from './state.js'
 
 interface RoundStore {
   getState(): RoundState | { readonly phase: 'loading' | 'error' }
-  transition(state: RoundState): void
-  updateRound(update: RoundUpdate, mode: MatchMode): void
+  events: {
+    startOnline(): boolean
+    startLocal(): boolean
+    connectionFailed(): boolean
+    disconnected(): boolean
+  }
+  updateRound(update: RoundUpdate, mode: MatchMode): boolean
 }
 
 interface RoundInput {

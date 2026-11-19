@@ -100,6 +100,22 @@ const unsubscribe = window.orbitalRunStore.subscribe(
 | `playing` | Идёт раунд. |
 | `finished` | Раунд завершён, итог доступен в `result`. |
 
+Правила переходов собраны в [src/app/state.ts](src/app/state.ts). Хранилище
+проверяет исходную фазу перед обработкой события или кадра.
+
+| Событие | Исходная фаза | Новая фаза |
+| --- | --- | --- |
+| Арена загружена | `loading` | `ready` |
+| Ошибка инициализации | `loading`, `ready` | `error` |
+| Старт онлайн-раунда | `ready`, `finished` | `connecting` |
+| Старт локального раунда | `ready`, `finished` | `starting` |
+| Связь оборвалась до первого кадра | `connecting` | `starting` (локально) |
+| Пришёл кадр отсчёта | `connecting`, `starting` | `countdown` |
+| Пришёл игровой кадр | `connecting`, `starting`, `countdown` | `playing` |
+| Пришёл итог | `connecting`, `starting`, `countdown`, `playing` | `finished` |
+| Связь оборвалась после первого кадра | `countdown`, `playing` | `ready` (локально) |
+
+Кадры текущей фазы в `countdown` и `playing` обновляют снимок без перехода.
 В фазах `countdown`, `playing` и `finished` в `frame` доступны таймер, очки
 и позиции объектов на арене.
 

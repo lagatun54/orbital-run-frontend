@@ -40,12 +40,11 @@ export function createRoundController({
       }
       active = undefined
       controls.clear()
-      if (store.getState().phase === 'connecting') {
+      if (store.events.connectionFailed()) {
         startMatch(name, 'local', startLocal)
         return
       }
-      store.transition({ phase: 'ready', mode: 'local', reason: 'disconnected' })
-      publish({ kind: 'interrupted' })
+      if (store.events.disconnected()) publish({ kind: 'interrupted' })
     })
     if (active === match) {
       match.session = session
@@ -56,7 +55,6 @@ export function createRoundController({
   }
 
   function startMatch(name: string, mode: MatchMode, startRound: StartRound): void {
-    store.transition(mode === 'online' ? { phase: 'connecting', mode } : { phase: 'starting', mode })
     publish({ kind: 'starting', mode })
     if (!disposed) begin(name, mode, startRound)
   }
@@ -65,8 +63,7 @@ export function createRoundController({
     const previous = store.getState().phase
     const { frame } = update
     const { phase } = frame
-    if (previous === 'finished' || (previous === 'playing' && phase === 'countdown')) return
-    store.updateRound(update, mode)
+    if (!store.updateRound(update, mode)) return
     renderFrame(frame, previous === 'connecting' || previous === 'starting')
 
     if (update.kind === 'frame') {
@@ -93,13 +90,12 @@ export function createRoundController({
         return
       }
       const state = store.getState()
-      if (disposed || active || (state.phase !== 'ready' && state.phase !== 'finished')) return
+      if (disposed || active || !('mode' in state)) return
+      const online = state.mode === 'online' && startOnline
+      const started = online ? store.events.startOnline() : store.events.startLocal()
+      if (!started) return
       controls.clear()
-      if (state.mode === 'online' && startOnline) {
-        startMatch(command.name, 'online', startOnline)
-      } else {
-        startMatch(command.name, 'local', startLocal)
-      }
+      startMatch(command.name, online ? 'online' : 'local', online || startLocal)
     },
     isActive,
   }
