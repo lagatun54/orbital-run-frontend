@@ -1,3 +1,4 @@
+import { Subject } from 'rxjs'
 import { Direction } from './direction.js'
 
 const keys = new Map([
@@ -7,7 +8,8 @@ const keys = new Map([
   ['KeyD', Direction.Right], ['ArrowRight', Direction.Right],
 ])
 
-export function createFlightControls(onChange: (direction: number) => void) {
+export function createFlightControls() {
+  const directions = new Subject<number>()
   const pressed = new Map<string, number>()
   const pointers = new Map<number, number>()
   let mask = 0
@@ -18,7 +20,7 @@ export function createFlightControls(onChange: (direction: number) => void) {
     for (const touch of pointers.values()) next |= touch
     if (next === mask) return
     mask = next
-    onChange(mask)
+    directions.next(mask)
   }
 
   function clear(): void {
@@ -46,6 +48,7 @@ export function createFlightControls(onChange: (direction: number) => void) {
 
   return {
     bindKeyboard, clear,
+    directions: directions.asObservable(),
     direction: () => mask,
     pressPointer(pointerId: number, direction: number) {
       pointers.set(pointerId, direction)

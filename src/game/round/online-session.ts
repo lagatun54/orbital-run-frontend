@@ -1,6 +1,7 @@
+import { animationFrames, buffer, exhaustMap, fromEvent, map, Observable, share, Subject, Subscription, take, takeUntil, timer } from 'rxjs'
 import { CRYSTAL_COUNT } from '../arena/constants.js'
 import type { Point, ShipPose } from '../arena/interfaces/frame.js'
-import type { RoundUpdate } from './interfaces/events.js'
+import type { RoundUpdate, SessionEvent } from './interfaces/events.js'
 import type { MatchFrame, MatchResult, PickupAck, PickupClaim, PilotState } from './interfaces/match.js'
 import type { StartRound } from './interfaces/session.js'
 import { isRecord, isFiniteNumber, isScore } from '../../shared/validation.js'
@@ -9,36 +10,36 @@ import { createPickupPrediction } from './pickup-prediction.js'
 
 const PICKUP_BATCH_MS = 50
 const MAX_SNAPSHOT_AGE_MS = 300
+const FIRST_UPDATE_TIMEOUT_MS = 6000
 
 export function createOnlineMatch(origin: string): StartRound {
-  return (name, emit) => {
+  return (name, directions) => new Observable<SessionEvent>(subscriber => {
     const endpoint = new URL('/ws', origin)
     endpoint.protocol = endpoint.protocol === 'https:' ? 'wss:' : 'ws:'
     const socket = new WebSocket(endpoint)
-    const timeout = window.setTimeout(() => socket.close(), 6000)
+    const messages = fromEvent<MessageEvent>(socket, 'message').pipe(
+      map(event => decodeRoundUpdate(event.data)),
+      share(),
+    )
     let direction = 0
     let frame: MatchFrame | undefined
     let prediction: ReturnType<typeof createPlayerPrediction> | undefined
     let shownPose: ShipPose | undefined
     let shownPickups: ReadonlySet<number> | undefined
     let receivedAt = 0
-    let request: number | undefined
-    let pickupTimer: number | undefined
-    const pickupQueue: PickupClaim[] = []
-    const predictPickups = createPickupPrediction(claim => {
-      pickupQueue.push(claim)
-      pickupTimer ??= window.setTimeout(flushPickups, PICKUP_BATCH_MS)
+    let predictionFrames: Subscription | undefined
+    const pickupClaims = new Subject<PickupClaim>()
+    const predictPickups = createPickupPrediction(claim => pickupClaims.next(claim))
+    const pickupBatches = pickupClaims.pipe(
+      buffer(pickupClaims.pipe(exhaustMap(() => timer(PICKUP_BATCH_MS)))),
+    ).subscribe(batch => {
+      if (socket.readyState !== WebSocket.OPEN) return
+      for (let index = 0; index < batch.length; index += CRYSTAL_COUNT) {
+        socket.send(JSON.stringify({ direction, pickups: batch.slice(index, index + CRYSTAL_COUNT) }))
+      }
     })
 
-    function flushPickups() {
-      pickupTimer = undefined
-      if (socket.readyState !== WebSocket.OPEN) return
-      while (pickupQueue.length) {
-        socket.send(JSON.stringify({ direction, pickups: pickupQueue.splice(0, CRYSTAL_COUNT) }))
-      }
-    }
-
-    function showPrediction(now: number) {
+    function predictFrame(now: number) {
       if (!frame || !prediction) return
       const pose = prediction.step(now)
       const fresh = now - receivedAt < Math.min(MAX_SNAPSHOT_AGE_MS, frame.remainingMs)
@@ -46,69 +47,69 @@ export function createOnlineMatch(origin: string): StartRound {
       if (pose === shownPose && pendingPickups === shownPickups) return
       shownPose = pose
       shownPickups = pendingPickups
-      emit({ kind: 'frame', frame: { ...frame, pendingPickups, player: { ...pose, score: frame.player.score } } })
-    }
-
-    function tick() {
-      request = requestAnimationFrame(tick)
-      showPrediction(performance.now())
+      return { ...frame, pendingPickups, player: { ...pose, score: frame.player.score } }
     }
 
     function stopPrediction() {
-      if (request !== undefined) cancelAnimationFrame(request)
-      if (pickupTimer !== undefined) window.clearTimeout(pickupTimer)
-      pickupTimer = undefined
-      pickupQueue.length = 0
-      request = undefined
+      predictionFrames?.unsubscribe()
+      predictionFrames = undefined
+      pickupBatches.unsubscribe()
       prediction = undefined
       frame = undefined
       shownPose = undefined
     }
 
-    socket.addEventListener('open', () => socket.send(JSON.stringify({ name })))
-    socket.addEventListener('message', event => {
-      const update = decodeRoundUpdate(event.data)
+    const subscriptions = new Subscription()
+
+    function emitPrediction(now: number) {
+      const frame = predictFrame(now)
+      if (frame) subscriber.next({ kind: 'frame', frame })
+    }
+
+    subscriptions.add(directions.subscribe(value => {
+      direction = value
+      prediction?.setDirection(value, performance.now())
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ direction }))
+    }))
+    subscriptions.add(fromEvent(socket, 'open').pipe(take(1)).subscribe(() => {
+      socket.send(JSON.stringify({ name }))
+    }))
+    subscriptions.add(timer(FIRST_UPDATE_TIMEOUT_MS).pipe(takeUntil(messages)).subscribe(() => {
+      socket.close()
+    }))
+    subscriptions.add(messages.subscribe(update => {
       if (!update) {
         socket.close()
         return
       }
-      window.clearTimeout(timeout)
       if (update.kind === 'frame' && update.frame.phase === 'playing') {
         const now = performance.now()
         receivedAt = now
         frame = update.frame
         if (!prediction) {
           prediction = createPlayerPrediction(frame.player, now, direction)
-          request = requestAnimationFrame(tick)
+          predictionFrames = animationFrames(performance).subscribe(({ timestamp }) => emitPrediction(timestamp))
         } else {
           prediction.receive(frame.player, now)
         }
         shownPose = undefined
-        showPrediction(now)
+        emitPrediction(now)
         return
       }
       if (update.kind === 'online-result') stopPrediction()
-      emit(update)
-    })
-    socket.addEventListener('close', () => {
-      window.clearTimeout(timeout)
-      stopPrediction()
-      emit({ kind: 'disconnected' })
-    })
+      subscriber.next(update)
+    }))
+    subscriptions.add(fromEvent(socket, 'close').subscribe(() => {
+      subscriber.next({ kind: 'disconnected' })
+      subscriber.complete()
+    }))
 
-    return {
-      setDirection(value) {
-        direction = value
-        prediction?.setDirection(value, performance.now())
-        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ direction }))
-      },
-      close() {
-        stopPrediction()
-        window.clearTimeout(timeout)
-        socket.close()
-      },
+    return () => {
+      subscriptions.unsubscribe()
+      stopPrediction()
+      if (socket.readyState < WebSocket.CLOSING) socket.close()
     }
-  }
+  })
 }
 
 export function decodeRoundUpdate(data: unknown): RoundUpdate | undefined {

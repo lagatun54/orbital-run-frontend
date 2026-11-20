@@ -506,6 +506,31 @@ body { margin: 0; }
 
 .game-status { overflow-wrap: anywhere; }
 
+.game-footer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: end;
+  gap: var(--space);
+  margin-inline-start: auto;
+}
+
+.game .sound-toggle {
+  min-height: 44px;
+  padding: 4px var(--space);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--muted);
+  font: 600 12px/1.35 var(--heading);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.game .sound-toggle[aria-pressed="true"] { color: var(--blue); }
+.game .sound-toggle:hover { background: var(--paper-blue); }
+.game .sound-toggle:active { background: var(--blue-pale); }
+
 .game-footer .game-shortcuts {
   display: flex;
   gap: 5px;

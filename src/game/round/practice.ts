@@ -1,8 +1,10 @@
+import { animationFrames, defer, map, startWith, takeWhile, withLatestFrom } from 'rxjs'
 import { directionVector } from '../direction.js'
 
 import { ARENA_WIDTH as WIDTH, ARENA_HEIGHT as HEIGHT, CRYSTAL_COUNT } from '../arena/constants.js'
 import type { Point } from '../arena/interfaces/frame.js'
 import { ROUND_DURATION_MS } from './constants.js'
+import type { SessionEvent } from './interfaces/events.js'
 import type { MatchFrame, PilotState } from './interfaces/match.js'
 import type { StartRound } from './interfaces/session.js'
 
@@ -15,14 +17,20 @@ function distanceSquared(a: Point, b: Point, scaleX = 1, scaleY = 1): number {
 
 type MutablePilot = { -readonly [Key in keyof PilotState]: PilotState[Key] }
 
+function readRoundTime(started: number, now: number): Pick<MatchFrame, 'phase' | 'remainingMs'> {
+  const elapsed = Math.max(0, now - started)
+  if (elapsed < COUNTDOWN_MS) return { phase: 'countdown', remainingMs: COUNTDOWN_MS - elapsed }
+
+  const remainingMs = Math.max(0, ROUND_DURATION_MS - (elapsed - COUNTDOWN_MS))
+  return { phase: remainingMs === 0 ? 'finished' : 'playing', remainingMs }
+}
+
 export function createLocalMatch(started: number): (now: number, direction: number) => MatchFrame {
   const player: MutablePilot = { x: 224, y: 270, angle: 0, score: 0 }
   const bot: MutablePilot = { x: 736, y: 270, angle: Math.PI, score: 0 }
   const crystals: Point[] = []
   let crystalSnapshot: readonly Point[] | undefined
-  const begins = started + COUNTDOWN_MS
-  const ends = begins + ROUND_DURATION_MS
-  let previous = begins
+  let previousRemainingMs = ROUND_DURATION_MS
 
   function respawn(index: number) {
     let point: Point
@@ -41,11 +49,11 @@ export function createLocalMatch(started: number): (now: number, direction: numb
   }
 
   return (now, direction) => {
-    if (now < begins) return snapshot('countdown', begins - Math.max(now, started))
+    const { phase, remainingMs } = readRoundTime(started, now)
+    if (phase === 'countdown') return snapshot(phase, remainingMs)
 
-    const step = Math.min(now, ends)
-    const elapsed = Math.min(Math.max(0, step - previous) / 1000, 0.1)
-    previous = step
+    const elapsed = Math.min(Math.max(0, previousRemainingMs - remainingMs) / 1000, 0.1)
+    previousRemainingMs = remainingMs
     const scaleX = window.innerWidth / WIDTH
     const scaleY = window.innerHeight / HEIGHT
     const screenScale = Math.max(scaleX, scaleY)
@@ -71,7 +79,7 @@ export function createLocalMatch(started: number): (now: number, direction: numb
       }
     }
 
-    return snapshot(now >= ends ? 'finished' : 'playing', ends - step)
+    return snapshot(phase, remainingMs)
   }
 }
 
@@ -85,15 +93,15 @@ function move(ship: MutablePilot, dx: number, dy: number, amount: number, scaleX
   ship.y = Math.min(HEIGHT - 23, Math.max(23, ship.y + stepY))
 }
 
-export const startLocalRound: StartRound = (name, emit) => {
+export const startLocalRound: StartRound = (name, directions) => defer(() => {
   const step = createLocalMatch(performance.now())
-  let direction = 0
-  let request = requestAnimationFrame(tick)
-
-  function tick(now: number): void {
-    const frame = step(now, direction)
-    if (frame.phase === 'finished') {
-      emit({
+  return animationFrames().pipe(
+    withLatestFrom(directions.pipe(startWith(0))),
+    map(([{ timestamp }, currentDirection]) => step(timestamp, currentDirection)),
+    takeWhile(frame => frame.phase !== 'finished', true),
+    map((frame): SessionEvent => {
+      if (frame.phase !== 'finished') return { kind: 'frame', frame }
+      return {
         kind: 'local-result',
         frame,
         result: {
@@ -102,15 +110,7 @@ export const startLocalRound: StartRound = (name, emit) => {
           score: frame.player.score,
           botScore: frame.bot.score,
         },
-      })
-      return
-    }
-    request = requestAnimationFrame(tick)
-    emit({ kind: 'frame', frame })
-  }
-
-  return {
-    setDirection(value) { direction = value },
-    close() { cancelAnimationFrame(request) },
-  }
-}
+      }
+    }),
+  )
+})

@@ -1,4 +1,6 @@
+import { Subject, map, merge } from 'rxjs'
 import { createScene, standby } from '../game/arena/scene.js'
+import { createGameAudio } from '../game/audio.js'
 import { createFlightControls } from '../game/controls.js'
 import { createRoundController } from '../game/round/controller.js'
 import type { RoundController } from '../game/round/interfaces/controller.js'
@@ -14,6 +16,7 @@ import { createAppStore } from './state.js'
 const lifetime = new AbortController()
 const { signal } = lifetime
 const store = createAppStore()
+const roundStarts = new Subject<string>()
 let controller: RoundController | undefined
 let destroyScene: (() => void) | undefined
 
@@ -38,19 +41,29 @@ import.meta.hot?.dispose(() => {
   disposeGame()
 })
 
-const dispatch = (command: RoundCommand) => controller?.dispatch(command)
-const controls = createFlightControls(direction => dispatch({ kind: 'direction', direction }))
-const ui = createInterface({
-  dispatch,
-  press: (pointer, direction) => {
-    if (controller?.isActive()) controls.pressPointer(pointer, direction)
-  },
-  release: controls.releasePointer,
-}, signal)
+const controls = createFlightControls()
+const commands = merge(
+  roundStarts.pipe(map((name): RoundCommand => ({ kind: 'start', name }))),
+  controls.directions.pipe(map((direction): RoundCommand => ({ kind: 'direction', direction }))),
+)
 
 try {
-  ui.init()
   const backendOrigin = getBackendOrigin()
+  const round = controller = createRoundController({
+    store, controls, commands,
+    startLocal: startLocalRound,
+    startOnline: backendOrigin ? createOnlineMatch(backendOrigin) : undefined,
+  })
+  const sound = createGameAudio(round, signal)
+  const ui = createInterface({
+    startRound: name => roundStarts.next(name),
+    sound,
+    press: (pointer, direction) => {
+      if (round.isActive()) controls.pressPointer(pointer, direction)
+    },
+    release: controls.releasePointer,
+  }, round, signal)
+  ui.init()
   const renderer = await createScene(ui.arena, ui.artwork)
   if (signal.aborted) {
     renderer.destroy()
@@ -58,26 +71,16 @@ try {
     destroyScene = renderer.destroy
     renderer.render(standby, true)
     const api = backendOrigin ? createScoresApi(backendOrigin) : null
-    const results = createLeaderboard(api, ui.records, signal)
-    controller = createRoundController({
-      store, controls,
-      renderFrame(frame, reset) {
-        renderer.render(frame, reset)
-        ui.round.showFrame(frame)
-      },
-      publish(event) {
-        if (event.kind === 'phase-changed') renderer.setRoundActive(true)
-        if (event.kind === 'finished' || event.kind === 'interrupted') renderer.setRoundActive(false)
-        ui.round.handleEvent(event)
-        results.handleEvent(event)
-      },
-      startLocal: startLocalRound,
-      startOnline: backendOrigin ? createOnlineMatch(backendOrigin) : undefined,
+    createLeaderboard(api, ui.records, round.events, signal)
+    round.frames.subscribe(({ frame, reset }) => renderer.render(frame, reset))
+    round.events.subscribe(event => {
+      if (event.kind === 'phase-changed') renderer.setRoundActive(true)
+      if (event.kind === 'finished' || event.kind === 'interrupted') renderer.setRoundActive(false)
     })
-    controls.bindKeyboard(controller.isActive, signal)
+    controls.bindKeyboard(round.isActive, signal)
     store.events.initialized(backendOrigin ? 'online' : 'local')
-    ui.round.enableStart()
-    ui.round.announce(backendOrigin ? 'Арена готова.' : 'Доступна локальная игра с ботом.')
+    ui.enableStart()
+    ui.announce(backendOrigin ? 'Арена готова.' : 'Доступна локальная игра с ботом.')
   }
 } catch (error) {
   if (!signal.aborted) {

@@ -1,6 +1,7 @@
+import type { Observable } from 'rxjs'
 import type { RoundCommand, RoundEvent, RoundUpdate } from './events.js'
 import type { MatchFrame, MatchMode } from './match.js'
-import type { RoundSession, StartRound } from './session.js'
+import type { StartRound } from './session.js'
 import type { RoundState } from './state.js'
 
 interface RoundStore {
@@ -21,20 +22,18 @@ interface RoundInput {
 
 export interface RoundDependencies {
   store: RoundStore
-  renderFrame(frame: MatchFrame, reset: boolean): void
-  publish(event: RoundEvent): void
+  commands: Observable<RoundCommand>
   controls: RoundInput
   startLocal: StartRound
   startOnline?: StartRound
 }
 
-export interface RoundController {
-  dispose(): void
-  dispatch(command: RoundCommand): void
-  isActive(): boolean
+export interface RoundStreams {
+  readonly frames: Observable<{ frame: MatchFrame; reset: boolean }>
+  readonly events: Observable<RoundEvent>
 }
 
-export interface MatchConnection {
-  session?: RoundSession
-  sentDirection: number
+export interface RoundController extends RoundStreams {
+  dispose(): void
+  isActive(): boolean
 }

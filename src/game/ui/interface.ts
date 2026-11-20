@@ -1,5 +1,7 @@
+import { exhaustMap, filter, fromEvent, merge, takeUntil, tap } from 'rxjs'
+import type { RoundStreams } from '../round/interfaces/controller.js'
 import type { RoundEvent } from '../round/interfaces/events.js'
-import type { MatchFrame, MatchResult } from '../round/interfaces/match.js'
+import type { MatchResult } from '../round/interfaces/match.js'
 import type { InterfaceActions } from './interfaces/actions.js'
 import { createRoundHud } from './round-hud.js'
 import { createJoystick } from './joystick.js'
@@ -7,7 +9,7 @@ import { createRecords } from './records.js'
 
 const briefing = 'За 30 секунд соберите больше звёздочек, чем бот.'
 
-export function createInterface(actions: InterfaceActions, signal: AbortSignal) {
+export function createInterface(actions: InterfaceActions, updates: RoundStreams, signal: AbortSignal) {
   const root = document.createElement('main')
   root.className = 'game'
   root.inert = true
@@ -51,7 +53,10 @@ export function createInterface(actions: InterfaceActions, signal: AbortSignal) 
     </div>
     <footer class="game-footer">
       <p class="game-status" role="status"></p>
-      <p class="game-shortcuts" hidden><kbd>WASD</kbd> <span>или</span> <kbd>↑ ↓ ← →</kbd></p>
+      <div class="game-footer-controls">
+        <p class="game-shortcuts" hidden><kbd>WASD</kbd> <span>или</span> <kbd>↑ ↓ ← →</kbd></p>
+        <button class="sound-toggle" type="button">Звук<span aria-hidden="true"></span></button>
+      </div>
     </footer>`
 
   const get = <T extends HTMLElement = HTMLElement>(selector: string) => root.querySelector<T>(selector)!
@@ -69,12 +74,14 @@ export function createInterface(actions: InterfaceActions, signal: AbortSignal) 
   const launchPlane = get('.launch-plane')
   const flightControls = get('.flight-controls')
   const shortcuts = get('.game-shortcuts')
+  const soundToggle = get<HTMLButtonElement>('.sound-toggle')
+  const soundLabel = get('.sound-toggle span')
   const status = get('.game-status')
   const joystick = createJoystick(actions, signal)
   const records = createRecords(announce, signal)
   const compact = matchMedia('(max-width: 980px), (max-height: 520px), (any-pointer: coarse)')
   const touchInput = matchMedia('(max-width: 640px), (any-pointer: coarse)')
-  const hud = createRoundHud()
+  const hud = createRoundHud(updates, signal)
   root.prepend(hud.scoreboard)
   menu.after(hud.countdown)
   flightControls.prepend(joystick.root)
@@ -85,15 +92,20 @@ export function createInterface(actions: InterfaceActions, signal: AbortSignal) 
     status.textContent = message
   }
 
+  function updateSoundToggle() {
+    soundToggle.setAttribute('aria-pressed', String(!actions.sound.muted))
+    soundLabel.textContent = actions.sound.muted ? ' выкл.' : ' вкл.'
+  }
+
   async function start() {
-    if (play.disabled || menu.hidden || play.classList.contains('is-launching')) return
+    actions.sound.launch()
     const name = Array.from(pilot.value.trim()).slice(0, 20).join('')
     play.classList.add('is-launching')
     play.setAttribute('aria-disabled', 'true')
     const flight = launchPlane.getAnimations()[0]
     if (flight) await flight.finished.catch(() => {})
     play.removeAttribute('aria-disabled')
-    if (!signal.aborted) actions.dispatch({ kind: 'start', name })
+    if (!signal.aborted) actions.startRound(name)
   }
 
   async function leaveMenu() {
@@ -123,7 +135,6 @@ export function createInterface(actions: InterfaceActions, signal: AbortSignal) 
     menu.inert = false
     menu.classList.remove('is-leaving')
     play.classList.remove('is-launching')
-    hud.hideCountdown()
     joystick.setEnabled(false)
     flightControls.hidden = true
     title.textContent = heading
@@ -139,68 +150,75 @@ export function createInterface(actions: InterfaceActions, signal: AbortSignal) 
     play.disabled = false
   }
 
-  const round = {
-    announce,
+  function handleRoundEvent(event: RoundEvent) {
+    switch (event.kind) {
+      case 'starting':
+        play.disabled = true
+        if (event.mode === 'online') {
+          launchLabel.textContent = 'Подключение…'
+          announce('Подключаемся к арене.')
+        }
+        break
+      case 'phase-changed': {
+        if (!menu.hidden && !menu.inert) {
+          root.classList.add('is-playing')
+          void leaveMenu()
+          records.setExpanded(false)
+          joystick.setEnabled(true)
+          flightControls.hidden = !touchInput.matches
+        }
+        const message = event.phase === 'countdown' ? 'Готовьтесь к старту.' : 'Раунд начался. Собирайте звёздочки!'
+        announce(event.mode === 'local' ? 'Локальная игра с ботом. ' + message : message)
+        break
+      }
+      case 'interrupted':
+        showStart('Связь прервалась', 'Играть локально')
+        announce('Сервер отключился. Можно начать новый раунд с ботом.')
+        break
+      case 'finished': {
+        const { result } = event.completion
+        const { score, botScore } = result
+        const outcome = score > botScore ? 'Победа!' : score < botScore ? 'Бот победил' : 'Ничья'
+        showStart(outcome, 'Играть ещё', result)
+        break
+      }
+    }
+  }
+
+  if (!signal.aborted) {
+    const disposed = fromEvent(signal, 'abort')
+    updates.events.pipe(takeUntil(disposed)).subscribe(handleRoundEvent)
+
+    const submit = fromEvent<SubmitEvent>(menu, 'submit').pipe(
+      tap(event => event.preventDefault()),
+    )
+    const enter = fromEvent<KeyboardEvent>(window, 'keydown').pipe(
+      filter(event => !event.defaultPrevented && !event.isComposing && !event.repeat &&
+        !(event.target instanceof Element && event.target.closest('input, button, .leaderboard'))),
+      tap(event => { if (event.code === 'KeyR' && records.toggle()) event.preventDefault() }),
+      filter(event => event.key === 'Enter' && !event.defaultPrevented),
+    )
+    merge(submit, enter).pipe(
+      filter(() => !play.disabled && !menu.hidden),
+      exhaustMap(() => start()),
+      takeUntil(disposed),
+    ).subscribe()
+  }
+  soundToggle.addEventListener('click', () => {
+    actions.sound.toggleMuted()
+    updateSoundToggle()
+  }, { signal })
+
+  return {
+    arena, announce, records: records.view,
     enableStart() {
       root.inert = false
       play.disabled = false
     },
-    showFrame(frame: MatchFrame) {
-      hud.showScore(frame)
-      if (frame.phase !== 'finished') hud.showCountdown(frame)
-    },
-    handleEvent(event: RoundEvent) {
-      switch (event.kind) {
-        case 'starting':
-          play.disabled = true
-          if (event.mode === 'online') {
-            launchLabel.textContent = 'Подключение…'
-            announce('Подключаемся к арене.')
-          }
-          break
-        case 'phase-changed': {
-          if (!menu.hidden && !menu.inert) {
-            root.classList.add('is-playing')
-            void leaveMenu()
-            records.setExpanded(false)
-            joystick.setEnabled(true)
-            flightControls.hidden = !touchInput.matches
-          }
-          const message = event.phase === 'countdown' ? 'Готовьтесь к старту.' : 'Раунд начался. Собирайте звёздочки!'
-          announce(event.mode === 'local' ? 'Локальная игра с ботом. ' + message : message)
-          break
-        }
-        case 'interrupted':
-          showStart('Связь прервалась', 'Играть локально')
-          announce('Сервер отключился. Можно начать новый раунд с ботом.')
-          break
-        case 'finished': {
-          const { result } = event.completion
-          const { score, botScore } = result
-          const outcome = score > botScore ? 'Победа!' : score < botScore ? 'Бот победил' : 'Ничья'
-          showStart(outcome, 'Играть ещё', result)
-          break
-        }
-      }
-    },
-  }
-
-  menu.addEventListener('submit', event => {
-    event.preventDefault()
-    start()
-  }, { signal })
-  window.addEventListener('keydown', event => {
-    if (event.defaultPrevented || event.isComposing || event.repeat ||
-        (event.target instanceof Element && event.target.closest('input, button, .leaderboard'))) return
-    if (event.code === 'KeyR' && records.toggle()) event.preventDefault()
-    else if (event.key === 'Enter' && !menu.hidden) start()
-  }, { signal })
-
-  return {
-    arena, round, records: records.view,
     artwork: root.querySelectorAll<HTMLCanvasElement>('canvas[data-artwork]'),
     init() {
       updateLayout()
+      updateSoundToggle()
       document.body.append(root)
       for (const query of [compact, touchInput]) query.addEventListener('change', updateLayout, { signal })
       signal.addEventListener('abort', () => root.remove(), { once: true })
